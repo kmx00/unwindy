@@ -74,10 +74,23 @@ Interactive terminal UI + section-aware addressing + multi-file support.
       2861 functions, packed `.grfn*` sections): parses in ~0.6 s and the
       relocated exception directory is loudly warned (`pdata.section`).
 
+## v0.0.3 - DONE
+
+Interactive column sorting + richer unwind/size column.
+
+- [x] `ops` column (table + TUI): compact prolog digest with sizes, e.g.
+      `4push sub 0x28 3xmm`, `1push sub 0x70 1sav` (`render.unwind_summary`).
+- [x] TUI **sort mode** (`s`/`Tab`): `Tab`/`<-`/`->` move a column cursor,
+      `Enter` sorts by it and toggles asc/desc, `a`/`d` force a direction; the
+      active column is highlighted, the applied sort shown in the title bar, and
+      a fresh sort jumps to the top. Every column is sortable; the chosen sort
+      persists across files in the picker.
+- [x] 91 unit tests, all passing (added `unwind_summary` + TUI sort-mode tests).
+
 ## Backlog / extra credit
 - [ ] Decode language-specific handler payloads (`__C_specific_handler` scope
       tables, `__GSHandlerCheck`, MSVC C++ `FuncInfo`).
-- [ ] In-TUI search / sort toggles.
+- [ ] In-TUI text search / filtering.
 - [ ] Full v3 unwind support once the spec is published (currently v3 parses
       best-effort using the v2 layout with a warning).
 - [ ] More sample binaries (frame-pointer-heavy, v2 epilog, drivers).

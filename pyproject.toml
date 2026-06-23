@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unwindy"
-version = "0.0.2"
+version = "0.0.3"
 description = "Slim PE64 x64 exception/unwind information viewer (no heavy deps)"
 readme = "README.md"
 requires-python = ">=3.9"

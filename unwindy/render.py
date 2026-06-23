@@ -264,8 +264,8 @@ def render_diagnostics(diags: Sequence[Diagnostic], painter: Painter) -> str:
 # --- function table ---------------------------------------------------------
 
 FUNC_COLUMNS = [
-    "#", "begin", "end", "size", "prolog", "codes", "flags", "stack", "x-sect",
-    "handler",
+    "#", "begin", "end", "size", "prolog", "codes", "ops", "flags", "stack",
+    "x-sect", "handler",
 ]
 
 
@@ -305,6 +305,43 @@ def _flags_label(ui: Optional[UnwindInfo]) -> str:
     return "+".join(parts) if parts else "."
 
 
+def unwind_summary(ui: Optional[UnwindInfo]) -> str:
+    """Compact one-line digest of the prolog operations and sizes."""
+    if ui is None:
+        return "-"
+    pushes = alloc = saves = xmms = 0
+    fp = None
+    mframe = False
+    for c in ui.codes:
+        op = c.op_enum
+        if op is UnwindOp.PUSH_NONVOL:
+            pushes += 1
+        elif op in (UnwindOp.ALLOC_SMALL, UnwindOp.ALLOC_LARGE):
+            alloc += c.alloc_size or 0
+        elif op in (UnwindOp.SAVE_NONVOL, UnwindOp.SAVE_NONVOL_FAR):
+            saves += 1
+        elif op in (UnwindOp.SAVE_XMM128, UnwindOp.SAVE_XMM128_FAR):
+            xmms += 1
+        elif op is UnwindOp.SET_FPREG:
+            fp = ui.frame_register_name
+        elif op is UnwindOp.PUSH_MACHFRAME:
+            mframe = True
+    parts: List[str] = []
+    if pushes:
+        parts.append(f"{pushes}push")
+    if alloc:
+        parts.append(f"sub {alloc:#x}")
+    if saves:
+        parts.append(f"{saves}sav")
+    if xmms:
+        parts.append(f"{xmms}xmm")
+    if fp:
+        parts.append(f"fp:{fp}")
+    if mframe:
+        parts.append("mframe")
+    return " ".join(parts) if parts else "."
+
+
 def function_row(pe: PEFile, f: RuntimeFunction, *, use_va: bool) -> List[object]:
     ui = f.unwind_info
     handler = "-"
@@ -317,6 +354,7 @@ def function_row(pe: PEFile, f: RuntimeFunction, *, use_va: bool) -> List[object
         f"{f.size:#x}",
         f"{ui.size_of_prolog:#x}" if ui else "-",
         ui.count_of_codes if ui else "-",
+        unwind_summary(ui),
         _flags_label(ui),
         f"{ui.fixed_stack_alloc:#x}" if ui else "-",
         xsect_label(pe, f),
@@ -347,10 +385,14 @@ def render_function_table(
     def color_xsect(padded: str, raw: object) -> str:
         return p.dim(padded) if str(raw) == "-" else p.red(padded)
 
+    def color_ops(padded: str, raw: object) -> str:
+        return p.dim(padded) if str(raw) in ("-", ".") else p.gray(padded)
+
     rows = [function_row(pe, f, use_va=use_va) for f in functions]
-    aligns = ["r", "l", "l", "r", "r", "r", "l", "r", "l", "l"]
-    col_color = [None, None, None, None, None, None, color_flags, None,
-                 color_xsect, color_handler]
+    #         #    begin end  size prol code ops        flags        stack xsect handler
+    aligns = ["r", "l", "l", "r", "r", "r", "l", "l", "r", "l", "l"]
+    col_color = [None, None, None, None, None, None, color_ops, color_flags,
+                 None, color_xsect, color_handler]
     return format_table(FUNC_COLUMNS, rows, aligns, p, col_color)
 
 

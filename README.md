@@ -49,8 +49,12 @@ it.
 * **File picker** -- when given more than one binary (or a directory), pick which
   image to inspect; each is analyzed lazily on open.
 * **Function list** -- paginated and scrollable over every `RUNTIME_FUNCTION`.
-  Begin/end are shown as `section:0xADDRESS`. An **`x-sect`** column flags (in
-  red, as `A->B`) any function whose body spans two sections.
+  Begin/end are shown as `section:0xADDRESS`. An **`ops`** column digests the
+  prolog (e.g. `4push sub 0x28 3xmm`) and an **`x-sect`** column flags (in red,
+  as `A->B`) any function whose body spans two sections.
+* **Sort mode** -- press `s` (or `Tab`) to enter an interactive column sorter:
+  `Tab`/`<-`/`->` move between columns, `Enter` sorts by the highlighted column
+  and toggles ascending/descending; the active sort is shown in the title bar.
 * **Inspect** -- `Enter` opens the full decoded detail (prolog unwind codes,
   handler, and the resolved chain), itself scrollable; `Left`/`Right` step to the
   previous/next function.
@@ -58,9 +62,9 @@ it.
 ```
   up / down (k / j)     move          Enter       inspect selected function
   PgUp / PgDn           page          Left/Right  prev/next (in detail)
-  Home / End (g / G)    jump          w           diagnostics (warnings/errors)
-  v                     RVA <-> VA    h or ?      help
-  Esc                   back / quit   q           quit
+  Home / End (g / G)    jump          s           sort mode (Tab + Enter)
+  v                     RVA <-> VA    w           diagnostics (warnings/errors)
+  Esc                   back / quit   h or ?      help        q  quit
 ```
 
 ## Non-interactive usage

@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from unwindy.tui import (
+    BACKTAB,
     DOWN,
     END,
     ENTER,
@@ -14,6 +15,7 @@ from unwindy.tui import (
     HOME,
     PGDN,
     PGUP,
+    TAB,
     UP,
     TuiApp,
     _decode_byte,
@@ -58,8 +60,10 @@ class SingleFileTests(unittest.TestCase):
         self.assertEqual(a.mode, TuiApp.MODE_LIST)
         frame = a.render_frame(120, 30)
         self.assertIn("begin", frame)
+        self.assertIn("ops", frame)
         self.assertIn("x-sect", frame)
         self.assertIn(".text:0x", frame)
+        self.assertIn("push", frame)  # ops digest content
 
     def test_navigation(self):
         a = _app()
@@ -135,6 +139,69 @@ class SingleFileTests(unittest.TestCase):
     def test_esc_and_q_quit_single_file(self):
         self.assertFalse(_app().handle_key("ESC"))
         self.assertFalse(_app().handle_key("q"))
+
+
+class SortModeTests(unittest.TestCase):
+    SIZE_COL = 3  # index of the "size" column in FUNC_COLUMNS
+
+    def test_enter_and_leave_sort_mode(self):
+        a = _app()
+        a.render_frame(120, 30)
+        a.handle_key("s")
+        self.assertTrue(a.sort_mode)
+        a.handle_key("ESC")
+        self.assertFalse(a.sort_mode)
+
+    def test_tab_moves_cursor_and_sort_by_size(self):
+        a = _app()
+        a.render_frame(120, 30)
+        a.handle_key("s")
+        for _ in range(self.SIZE_COL):
+            a.handle_key(TAB)
+        self.assertEqual(a.sort_cursor, self.SIZE_COL)
+        a.handle_key(ENTER)  # sort ascending by size
+        self.assertEqual(a.sort_applied, self.SIZE_COL)
+        self.assertFalse(a.sort_desc)
+        sizes = [f.size for f in a.entry().functions]
+        self.assertEqual(sizes, sorted(sizes))
+        self.assertEqual(a.sel, 0)  # jumped to top
+        a.handle_key(ENTER)  # toggle to descending
+        self.assertTrue(a.sort_desc)
+        sizes = [f.size for f in a.entry().functions]
+        self.assertEqual(sizes, sorted(sizes, reverse=True))
+
+    def test_backtab_wraps_and_force_dir(self):
+        a = _app()
+        a.render_frame(120, 30)
+        a.handle_key("s")
+        a.handle_key(BACKTAB)  # wrap to last column
+        from unwindy.render import FUNC_COLUMNS
+
+        self.assertEqual(a.sort_cursor, len(FUNC_COLUMNS) - 1)
+        # 'a' / 'd' force ascending / descending on the cursor column
+        a.sort_cursor = self.SIZE_COL
+        a.handle_key("d")
+        self.assertTrue(a.sort_desc)
+        self.assertEqual(a.sort_applied, self.SIZE_COL)
+        a.handle_key("a")
+        self.assertFalse(a.sort_desc)
+
+    def test_sort_persists_across_files(self):
+        a = _app(files=[str(SAMPLE), str(SAMPLE2)])
+        a.handle_key(ENTER)  # open first file
+        a.render_frame(120, 30)
+        a.handle_key("s")
+        for _ in range(self.SIZE_COL):
+            a.handle_key(TAB)
+        a.handle_key(ENTER)
+        a.handle_key(ENTER)  # size desc
+        a.handle_key(ESC)
+        a.handle_key(ESC)  # back to picker
+        self.assertEqual(a.mode, TuiApp.MODE_FILES)
+        a.handle_key(DOWN)
+        a.handle_key(ENTER)  # open second file
+        sizes = [f.size for f in a.entry().functions]
+        self.assertEqual(sizes, sorted(sizes, reverse=True))
 
 
 class MultiFileTests(unittest.TestCase):

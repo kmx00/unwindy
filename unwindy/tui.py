@@ -33,8 +33,11 @@ from .unwind import RuntimeFunction
 UP, DOWN, LEFT, RIGHT = "UP", "DOWN", "LEFT", "RIGHT"
 PGUP, PGDN, HOME, END = "PGUP", "PGDN", "HOME", "END"
 ENTER, ESC, BACKSPACE = "ENTER", "ESC", "BACKSPACE"
+TAB, BACKTAB = "TAB", "BACKTAB"
 
-_ALIGNS = ["r", "l", "l", "r", "r", "r", "l", "r", "l", "l"]
+# Column alignment, parallel to render.FUNC_COLUMNS:
+#         #    begin end  size prol code ops  flags stk  xsect handler
+_ALIGNS = ["r", "l", "l", "r", "r", "r", "l", "l", "r", "l", "l"]
 
 
 # --- ANSI-aware string helpers ----------------------------------------------
@@ -132,7 +135,7 @@ def _decode_posix_seq(seq: bytes) -> str:
         body = text[1:]
         simple = {
             "A": UP, "B": DOWN, "C": RIGHT, "D": LEFT,
-            "H": HOME, "F": END,
+            "H": HOME, "F": END, "Z": BACKTAB,
         }
         if body[:1] in simple:
             return simple[body[:1]]
@@ -151,6 +154,8 @@ def _decode_posix_seq(seq: bytes) -> str:
 def _decode_byte(b: int) -> str:
     if b in (13, 10):
         return ENTER
+    if b == 9:
+        return TAB
     if b in (127, 8):
         return BACKSPACE
     if b == 3:  # Ctrl-C
@@ -176,11 +181,14 @@ class _WindowsKeyReader:
             mapping = {
                 "H": UP, "P": DOWN, "K": LEFT, "M": RIGHT,
                 "I": PGUP, "Q": PGDN, "G": HOME, "O": END,
+                "\x0f": BACKTAB,
             }
             return mapping.get(code, ESC)
         if ch in ("\r", "\n"):
             return ENTER
-        if ch in ("\x08",):
+        if ch == "\t":
+            return TAB
+        if ch == "\x08":
             return BACKSPACE
         if ch == "\x03":
             return "q"
@@ -224,7 +232,9 @@ class _Entry:
         except (UnwindyError, OSError, ValueError) as exc:
             self.error = f"{type(exc).__name__}: {exc}"
 
-    def rows(self, use_va: bool) -> Tuple[str, List[str], List[bool]]:
+    def rows(
+        self, use_va: bool
+    ) -> Tuple[str, List[str], List[bool], List[int]]:
         if use_va in self._rows_cache:
             return self._rows_cache[use_va]
         result = _compose_rows(self.pe, self.functions, use_va)
@@ -234,7 +244,7 @@ class _Entry:
 
 def _compose_rows(
     pe: Optional[PEFile], functions: Sequence[RuntimeFunction], use_va: bool
-) -> Tuple[str, List[str], List[bool]]:
+) -> Tuple[str, List[str], List[bool], List[int]]:
     cols = len(FUNC_COLUMNS)
     raw = [[str(c) for c in function_row(pe, f, use_va=use_va)] for f in functions]
     widths = [len(h) for h in FUNC_COLUMNS]
@@ -249,7 +259,7 @@ def _compose_rows(
     header = sep.join(cell(FUNC_COLUMNS[i], i) for i in range(cols))
     rows = [sep.join(cell(r[i], i) for i in range(cols)) for r in raw]
     meta = [func_section_info(pe, f)[2] for f in functions]
-    return header, rows, meta
+    return header, rows, meta, widths
 
 
 # --- the app ----------------------------------------------------------------
@@ -293,6 +303,12 @@ class TuiApp:
         self.text_title = ""
         self.text_scroll = 0
         self.text_kind = ""  # 'detail' | 'warnings' | 'help' | 'error'
+
+        # interactive column-sort state
+        self.sort_mode = False
+        self.sort_cursor = 0          # column the Tab cursor is on
+        self.sort_applied: Optional[int] = None  # column currently sorted by
+        self.sort_desc = False
 
         if len(self.entries) > 1:
             self.mode = self.MODE_FILES
@@ -446,18 +462,21 @@ class TuiApp:
         e.load()
         self.sel = 0
         self.top = 0
+        self.sort_mode = False
         if e.error:
             self._open_text("error", f"Error loading {os.path.basename(e.path)}",
                             [self.painter.red(e.error)])
         else:
             self.mode = self.MODE_LIST
+            if self.sort_applied is not None:
+                self._sort_current()
 
     # -- LIST mode ------------------------------------------------------------
 
     def _lines_list(self, cols: int, rows: int) -> List[str]:
         p = self.painter
         e = self.entry()
-        header, rowstrs, meta = e.rows(self.use_va)
+        header, rowstrs, meta, widths = e.rows(self.use_va)
         nfun = len(rowstrs)
         warns = len(e.analysis.diagnostics.warnings) if e.analysis else 0
         errs = len(e.analysis.diagnostics.errors) if e.analysis else 0
@@ -466,9 +485,15 @@ class TuiApp:
         warn_txt = ""
         if warns or errs:
             warn_txt = f"   ! {warns}w {errs}e"
-        title = f" {name}   {pos}   {'VA' if self.use_va else 'RVA'}{warn_txt} "
+        sort_txt = ""
+        if self.sort_applied is not None:
+            arrow = "desc" if self.sort_desc else "asc"
+            sort_txt = f"   sort:{FUNC_COLUMNS[self.sort_applied]} {arrow}"
+        title = (
+            f" {name}   {pos}   {'VA' if self.use_va else 'RVA'}{warn_txt}{sort_txt} "
+        )
         lines = [self._bar(title, cols)]
-        lines.append(p.bold(plain_truncate(header, cols)))
+        lines.append(self._header_line(widths, cols))
         body_h = max(1, rows - 3)
         self.page = body_h
         if nfun == 0:
@@ -490,17 +515,38 @@ class TuiApp:
                     lines.append(p.red(s))
                 else:
                     lines.append(s)
-        back = "back" if len(self.entries) > 1 else "quit"
-        lines.append(
-            self._bar(
-                f" up/down  PgUp/PgDn  enter inspect  w warnings  v va/rva  "
-                f"esc {back}  q quit ",
-                cols,
+        if self.sort_mode:
+            footer = (
+                f" SORT  tab/<-/-> column   enter sort (toggle asc/desc)   "
+                f"esc done   [{FUNC_COLUMNS[self.sort_cursor]}] "
             )
-        )
+        else:
+            back = "back" if len(self.entries) > 1 else "quit"
+            footer = (
+                f" up/down  PgUp/PgDn  enter inspect  s sort  w warnings  "
+                f"v va/rva  esc {back}  q quit "
+            )
+        lines.append(self._bar(footer, cols))
         return lines
 
+    def _header_line(self, widths: List[int], cols: int) -> str:
+        p = self.painter
+        sep = "  "
+        parts = []
+        for i, name in enumerate(FUNC_COLUMNS):
+            cell = name.rjust(widths[i]) if _ALIGNS[i] == "r" else name.ljust(widths[i])
+            if self.sort_mode and i == self.sort_cursor:
+                cell = p.reverse(cell)
+            elif self.sort_applied == i:
+                cell = p.wrap(cell, "green", "bold")
+            else:
+                cell = p.bold(cell)
+            parts.append(cell)
+        return ansi_truncate(sep.join(parts), cols)
+
     def _handle_list(self, key: str) -> bool:
+        if self.sort_mode:
+            return self._handle_sort(key)
         e = self.entry()
         n = len(e.functions)
         if key in (UP, "k"):
@@ -517,6 +563,10 @@ class TuiApp:
             self.sel = max(0, n - 1)
         elif key == ENTER and n:
             self._open_detail()
+        elif key in ("s", TAB):
+            self.sort_mode = True
+            if self.sort_applied is not None:
+                self.sort_cursor = self.sort_applied
         elif key == "w":
             self._open_warnings()
         elif key in ("h", "?"):
@@ -531,6 +581,81 @@ class TuiApp:
             else:
                 return False
         return True
+
+    def _handle_sort(self, key: str) -> bool:
+        ncols = len(FUNC_COLUMNS)
+        if key in (TAB, RIGHT, "l"):
+            self.sort_cursor = (self.sort_cursor + 1) % ncols
+        elif key in (BACKTAB, LEFT, "h"):
+            self.sort_cursor = (self.sort_cursor - 1) % ncols
+        elif key in (ENTER, " "):
+            if self.sort_applied == self.sort_cursor:
+                self.sort_desc = not self.sort_desc
+            else:
+                self.sort_applied = self.sort_cursor
+                self.sort_desc = False
+            self._sort_current()
+        elif key == "a":
+            self.sort_applied = self.sort_cursor
+            self.sort_desc = False
+            self._sort_current()
+        elif key == "d":
+            self.sort_applied = self.sort_cursor
+            self.sort_desc = True
+            self._sort_current()
+        elif key in (UP, "k"):
+            self.sel = self._clamp(self.sel - 1, 0, max(0, len(self.entry().functions) - 1))
+        elif key in (DOWN, "j"):
+            self.sel = self._clamp(self.sel + 1, 0, max(0, len(self.entry().functions) - 1))
+        elif key in (ESC, "s", "q"):
+            self.sort_mode = False
+        return True
+
+    def _sort_keyfn(self, col: int, pe):
+        def key(f: RuntimeFunction):
+            u = f.unwind_info
+            if col == 0:
+                return f.index if f.index is not None else -1
+            if col == 1:
+                return f.begin_address
+            if col == 2:
+                return f.end_address
+            if col == 3:
+                return f.size
+            if col == 4:
+                return u.size_of_prolog if u else -1
+            if col == 5:
+                return u.count_of_codes if u else -1
+            if col == 6:  # ops summary -> rank by stack footprint
+                return u.fixed_stack_alloc if u else -1
+            if col == 7:  # flags
+                if not u:
+                    return -1
+                return (
+                    (4 if u.is_chained else 0)
+                    + (2 if u.has_termination_handler else 0)
+                    + (1 if u.has_exception_handler else 0)
+                )
+            if col == 8:
+                return u.fixed_stack_alloc if u else -1
+            if col == 9:  # x-sect
+                return (1 if func_section_info(pe, f)[2] else 0, f.begin_address)
+            if col == 10:  # handler
+                return u.handler_rva if (u and u.handler_rva) else -1
+            return f.begin_address
+
+        return key
+
+    def _sort_current(self) -> None:
+        e = self.entry()
+        if e.pe is None or self.sort_applied is None or not e.functions:
+            return
+        e.functions.sort(key=self._sort_keyfn(self.sort_applied, e.pe),
+                         reverse=self.sort_desc)
+        e._rows_cache.clear()
+        # Surface the extremes: a fresh sort jumps to the top of the list.
+        self.sel = 0
+        self.top = 0
 
     # -- TEXT mode (detail / warnings / help / error) ------------------------
 
@@ -630,6 +755,7 @@ _HELP_LINES = [
     "",
     "  Lists every RUNTIME_FUNCTION in the PE64 exception directory.",
     "  Addresses are shown as  section:0xADDRESS  (begin and end).",
+    "  The 'ops' column digests the prolog, e.g.  4push sub 0x28 3xmm.",
     "  The 'x-sect' column flags a function whose body spans two sections",
     "  (shown as A->B and highlighted in red).",
     "",
@@ -644,6 +770,12 @@ _HELP_LINES = [
     "  h or ?                  this help",
     "  Esc                     back (to file list) / quit",
     "  q                       quit",
+    "",
+    "sort mode  (press 's' or Tab in the list)",
+    "  Tab / Left / Right      move between columns",
+    "  Enter                   sort by the column (press again to flip asc/desc)",
+    "  a / d                   force ascending / descending",
+    "  Esc or s                leave sort mode (the sort is kept)",
 ]
 
 

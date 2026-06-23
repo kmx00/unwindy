@@ -8,12 +8,23 @@ from tests._pebuilder import (
     CODE_PERMS,
     RDATA_PERMS,
     PEBuilder,
+    alloc_small,
     encode_runtime_function,
     encode_unwind_info,
+    push_nonvol,
+    save_nonvol,
+    save_xmm128,
 )
+from unwindy.errors import DiagnosticBag
 from unwindy.pe import PEFile
-from unwindy.render import addr_label, func_section_info, function_row, xsect_label
-from unwindy.unwind import RuntimeFunction
+from unwindy.render import (
+    addr_label,
+    func_section_info,
+    function_row,
+    unwind_summary,
+    xsect_label,
+)
+from unwindy.unwind import RuntimeFunction, parse_unwind_info
 
 
 def _pe(rf: bytes) -> PEFile:
@@ -58,6 +69,35 @@ class LabelTests(unittest.TestCase):
         row = [str(c) for c in function_row(pe, f, use_va=False)]
         self.assertIn(".text:0x1100", row)
         self.assertIn(".text:0x1200", row)
+
+class UnwindSummaryTests(unittest.TestCase):
+    def _parse(self, blob: bytes):
+        b = PEBuilder()
+        b.add_section(".text", 0x1000, b"\xcc" * 0x2000, CODE_PERMS)
+        b.add_section(".xdata", 0x4000, blob, RDATA_PERMS)
+        pe = PEFile(b.build())
+        return parse_unwind_info(pe, 0x4000, DiagnosticBag())
+
+    def test_summary_mixed(self):
+        codes = (
+            push_nonvol(2, 3)
+            + push_nonvol(3, 5)
+            + alloc_small(7, 0x28)
+            + save_xmm128(9, 6, 0x40)
+        )
+        ui = self._parse(encode_unwind_info(prolog=9, code_words=codes))
+        self.assertEqual(unwind_summary(ui), "2push sub 0x28 1xmm")
+
+    def test_summary_saves(self):
+        codes = save_nonvol(9, 3, 0x48) + save_nonvol(9, 6, 0x50)
+        ui = self._parse(encode_unwind_info(prolog=9, code_words=codes))
+        self.assertEqual(unwind_summary(ui), "2sav")
+
+    def test_summary_empty(self):
+        ui = self._parse(encode_unwind_info(prolog=0))
+        self.assertEqual(unwind_summary(ui), ".")
+        self.assertEqual(unwind_summary(None), "-")
+
 
 
 if __name__ == "__main__":
