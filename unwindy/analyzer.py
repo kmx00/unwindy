@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from .errors import DiagnosticBag, UnwindFormatError
 from .pe import DataDirectory, PEFile
+from .handlers import decode_handlers
 from .unwind import RuntimeFunction, UnwindInfo, parse_unwind_info
 
 RUNTIME_FUNCTION_SIZE = 12
@@ -198,6 +199,7 @@ def analyze(pe: PEFile, *, strict: bool = True) -> Analysis:
 
     _check_overlaps(analysis.functions, bag)
     _check_handlers_mapped(pe, analysis.functions, bag)
+    decode_handlers(pe, analysis.functions, bag)
     return analysis
 
 

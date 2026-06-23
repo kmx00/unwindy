@@ -158,6 +158,7 @@ def _unwind_to_dict(pe: PEFile, ui: Optional[UnwindInfo]) -> Optional[dict]:
         "handler_rva": ui.handler_rva,
         "handler_kind": ui.handler_kind,
         "language_data_rva": ui.language_data_rva,
+        "handler_data": ui.handler_data.to_dict() if ui.handler_data is not None else None,
     }
     if ui.chained_function is not None:
         d["chained"] = _func_to_dict(pe, ui.chained_function)

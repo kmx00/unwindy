@@ -87,9 +87,47 @@ Interactive column sorting + richer unwind/size column.
       persists across files in the picker.
 - [x] 91 unit tests, all passing (added `unwind_summary` + TUI sort-mode tests).
 
+## v0.0.4 - DONE
+
+Decode language-specific exception-handler payloads (`unwindy/handlers.py`).
+
+### Handler identification
+- [x] Import-table parser (`ImportResolver`) maps IAT slots -> `(dll, symbol)`.
+- [x] Handler routine named by following `jmp [rip]` / `jmp rel32` thunks to the
+      imported CRT handler; statically-linked `__GSHandlerCheck_*` wrappers are
+      named by the handler they tail-call (body scan bounded to the routine's own
+      `.pdata` extent, so it never bleeds into a neighbour).
+
+### Payload decoders (validated against the owning function's bounds)
+- [x] `__C_specific_handler` **scope tables**: count + records, each classified
+      `__except (filter)` / `__except (EXECUTE_HANDLER)` / `__finally`; loud
+      warnings on out-of-range / truncated tables.
+- [x] `__GSHandlerCheck` **`GS_HANDLER_DATA`**: cookie offset, EHANDLER/UHANDLER/
+      alignment flags, aligned-base/alignment.
+- [x] MSVC C++ **`FuncInfo`** (FH3): magic/version, maxState, unwind/try-block/
+      ip-to-state maps, with try-block + catch (`HandlerType`) expansion.
+- [x] **`__CxxFrameHandler4`**: compact FH4 `FuncInfoHeader` flags (state/IP maps
+      noted, not expanded).
+- [x] Structural fallback classifies statically-linked, unnamed handlers; any
+      payload matching no known shape is reported raw, never guessed.
+
+### Surfacing
+- [x] Rich per-function detail (CLI + TUI), a compact tag in the function-table
+      `handler` column (e.g. `scope[2]`, `cxx4`, `gs+cxx4`), and a full
+      `handler_data` object in `--json`.
+
+### Verification
+- [x] 113 unit tests, all passing (+22): byte-level decoders for scope/GS/FH3/FH4
+      (the GS and FH3 formats are covered by synthetic `_pebuilder` fixtures, as
+      neither bundled sample emits them), structural classification through
+      `analyze`, and real-sample assertions.
+- [x] Bundled `b325...` sample decodes to 4 `__C_specific_handler` scope tables,
+      28 `__CxxFrameHandler4` (FH4), 4 GS-wrapped FH4, 107 unrecognized local
+      handlers, with **0** warnings.
+
 ## Backlog / extra credit
-- [ ] Decode language-specific handler payloads (`__C_specific_handler` scope
-      tables, `__GSHandlerCheck`, MSVC C++ `FuncInfo`).
+- [x] Decode language-specific handler payloads (`__C_specific_handler` scope
+      tables, `__GSHandlerCheck`, MSVC C++ `FuncInfo`).  *(v0.0.4)*
 - [ ] In-TUI text search / filtering.
 - [ ] Full v3 unwind support once the spec is published (currently v3 parses
       best-effort using the v2 layout with a warning).

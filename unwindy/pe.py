@@ -269,6 +269,31 @@ class PEFile:
         self._need(off, length)
         return self.data[off : off + length]
 
+    def read_clamped(self, rva: int, length: int) -> bytes:
+        """Read up to ``length`` bytes at ``rva``, truncating at the end of the
+        owning section's raw data (or the header region) instead of raising.
+        Returns ``b""`` when ``rva`` is not mapped.  Useful for reading
+        variable-length data (C strings, handler payloads) of unknown extent."""
+        try:
+            off = self.rva_to_offset(rva)
+        except PEFormatError:
+            return b""
+        sec = self.section_for_rva(rva)
+        if sec is not None:
+            avail = sec.raw_ptr + sec.raw_size - off
+        else:
+            avail = self.size_of_headers - rva
+        n = max(0, min(length, avail, len(self.data) - off))
+        return self.data[off : off + n]
+
+    def read_cstr(self, rva: int, max_len: int = 512) -> str:
+        """Read a NUL-terminated latin-1 string at ``rva`` (clamped)."""
+        raw = self.read_clamped(rva, max_len)
+        nul = raw.find(b"\x00")
+        if nul >= 0:
+            raw = raw[:nul]
+        return raw.decode("latin-1", "replace")
+
     def rva_to_va(self, rva: int) -> int:
         return self.image_base + rva
 

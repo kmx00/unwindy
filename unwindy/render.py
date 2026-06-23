@@ -14,6 +14,7 @@ from .analyzer import Analysis
 from .errors import Diagnostic, Severity
 from .pe import PEFile
 from .unwind import RuntimeFunction, UnwindInfo, UnwindOp
+from .handlers import HandlerData
 
 
 # --- color ------------------------------------------------------------------
@@ -345,7 +346,9 @@ def unwind_summary(ui: Optional[UnwindInfo]) -> str:
 def function_row(pe: PEFile, f: RuntimeFunction, *, use_va: bool) -> List[object]:
     ui = f.unwind_info
     handler = "-"
-    if ui and ui.handler_rva:
+    if ui and ui.handler_data is not None:
+        handler = ui.handler_data.tag()
+    elif ui and ui.handler_rva:
         handler = addr_label(pe, ui.handler_rva, use_va=use_va)
     return [
         "-" if f.index is None else f.index,
@@ -411,6 +414,90 @@ _OP_COLOR = {
 }
 
 
+def _render_handler_data(
+    pe: PEFile, hd: HandlerData, p: Painter, indent: str, use_va: bool
+) -> List[str]:
+    """Render the decoded language-specific handler payload."""
+
+    def a(rva: int) -> str:
+        return addr_label(pe, rva, use_va=use_va)
+
+    out: List[str] = []
+    head = indent + p.gray(f"  language-specific data @ rva {hd.lsda_rva:#x}  kind={hd.kind}")
+    if hd.dll:
+        head += p.gray(f"  ({hd.routine_name} from {hd.dll})")
+    elif hd.wraps:
+        head += p.gray(f"  (GS cookie check wrapping {hd.wraps})")
+    out.append(head)
+
+    if hd.scope_records:
+        out.append(indent + p.cyan(f"  scope table: {len(hd.scope_records)} region(s)"))
+        for i, s in enumerate(hd.scope_records):
+            if s.kind == "finally":
+                desc = f"__finally  handler {a(s.handler)}"
+            elif s.kind == "except (EXECUTE_HANDLER)":
+                desc = f"__except (EXECUTE_HANDLER)  -> {a(s.target)}"
+            else:
+                desc = f"__except  filter {a(s.handler)}  -> {a(s.target)}"
+            out.append(
+                indent + f"    [{i}] try [{a(s.begin)}, {a(s.end)})  " + p.yellow(desc)
+            )
+
+    if hd.gs is not None:
+        g = hd.gs
+        flags = "+".join(
+            n for n, on in (("EHANDLER", g.ehandler), ("UHANDLER", g.uhandler)) if on
+        ) or "none"
+        extra = (
+            f"  aligned-base {g.aligned_base_offset:#x} align {g.alignment:#x}"
+            if g.has_alignment
+            else ""
+        )
+        out.append(
+            indent
+            + p.magenta("  GS cookie: ")
+            + f"@ frame+{g.cookie_offset:#x}  flags {flags}{extra}"
+        )
+
+    if hd.cxx is not None:
+        c = hd.cxx
+        out.append(
+            indent
+            + p.green("  C++ FuncInfo ")
+            + f"@ rva {c.funcinfo_rva:#x}  magic {c.magic:#x} (v{c.version})  "
+            + f"maxState {c.max_state}  tryBlocks {c.n_try_blocks}"
+        )
+        for i, tb in enumerate(c.try_blocks):
+            out.append(
+                indent
+                + f"    try[{i}] states [{tb.try_low}..{tb.try_high}] "
+                + f"catchHigh {tb.catch_high}  {tb.n_catches} catch(es)"
+            )
+            for cat in tb.catches:
+                tname = "catch(...)" if cat.type_rva == 0 else f"type {a(cat.type_rva)}"
+                out.append(
+                    indent
+                    + f"      {tname}  -> handler {a(cat.handler_rva)}  "
+                    + f"obj@frame+{cat.catch_object_offset:#x}"
+                )
+
+    if hd.fh4 is not None:
+        f4 = hd.fh4
+        names = ", ".join(f4.flag_names()) or "none"
+        out.append(
+            indent
+            + p.green("  C++ FuncInfo (FH4) ")
+            + f"@ rva {f4.funcinfo_rva:#x}  header {f4.header:#04x} [{names}]"
+        )
+        out.append(indent + p.dim("    compact FH4 layout; state/IP maps not expanded"))
+
+    if hd.kind == "unknown":
+        out.append(indent + p.dim(f"  unrecognized handler data; raw {hd.raw_head[:16].hex()}"))
+    if hd.notes:
+        out.append(indent + p.dim("  note: " + "; ".join(hd.notes)))
+    return out
+
+
 def _render_unwind_info(
     pe: PEFile, ui: UnwindInfo, painter: Painter, indent: str, use_va: bool
 ) -> List[str]:
@@ -450,13 +537,17 @@ def _render_unwind_info(
         hsec = pe.section_for_rva(ui.handler_rva)
         secname = hsec.name if hsec else "?"
         va = f" (va {pe.image_base + ui.handler_rva:#x})" if use_va else ""
+        hd = ui.handler_data
+        label = hd.routine_label() if hd is not None else (ui.handler_kind or "?")
         out.append(
             indent
             + p.yellow("  handler: ")
-            + f"{ui.handler_kind}  routine rva {ui.handler_rva:#x}{va} "
+            + f"{label}  routine rva {ui.handler_rva:#x}{va} "
             + p.gray(f"[{secname}]")
         )
-        if ui.language_data_rva is not None:
+        if hd is not None:
+            out.extend(_render_handler_data(pe, hd, p, indent + "  ", use_va))
+        elif ui.language_data_rva is not None:
             out.append(
                 indent
                 + p.gray(f"  language-specific data rva {ui.language_data_rva:#x}")

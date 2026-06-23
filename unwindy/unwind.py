@@ -13,10 +13,13 @@ from __future__ import annotations
 import enum
 import struct
 from dataclasses import dataclass, field
-from typing import List, Optional, Set
+from typing import TYPE_CHECKING, List, Optional, Set
 
 from .errors import DiagnosticBag, UnwindFormatError
 from .pe import PEFile
+
+if TYPE_CHECKING:
+    from .handlers import HandlerData
 
 # General-purpose register encoding shared by OpInfo and FrameRegister.
 GP_REGISTERS = (
@@ -117,6 +120,7 @@ class UnwindInfo:
     language_data_rva: Optional[int] = None
     chained_function: Optional[RuntimeFunction] = None
     struct_size: int = 0
+    handler_data: Optional["HandlerData"] = None
 
     # -- flag helpers ---------------------------------------------------------
 

@@ -126,8 +126,21 @@ python -m unwindy app.exe --json --only-handlers > handlers.json
   human-readable instruction (e.g. `sub rsp, 0x28`, `mov [rsp+0x48], rbx`).
 * **Chaining** — `UNW_FLAG_CHAININFO` is followed recursively, with cycle and
   depth protection.
-* **Handlers** — `UNW_FLAG_EHANDLER` / `UNW_FLAG_UHANDLER` handler RVA and the
-  RVA of the trailing language-specific data.
+* **Language-specific handlers** — the handler routine is *named* by following
+  its import thunk (e.g. `__C_specific_handler`, `__CxxFrameHandler4`) or, for a
+  statically-linked `__GSHandlerCheck_*` cookie-check wrapper, by the handler it
+  wraps. The trailing payload is then decoded and validated against the function:
+  - `__C_specific_handler` **scope tables** — every `__try` region classified as
+    `__except (filter)`, `__except (EXECUTE_HANDLER)`, or `__finally`, with its
+    filter / body / handler addresses.
+  - `__GSHandlerCheck` **`GS_HANDLER_DATA`** — stack-cookie frame offset,
+    EHANDLER/UHANDLER/alignment flags, and aligned-base/alignment fields.
+  - **MSVC C++ `FuncInfo`** (FH3) — magic/version, state count, and the expanded
+    try-block / catch maps (catch type, handler funclet, frame offset).
+  - **`__CxxFrameHandler4`** — the compact FH4 `FuncInfoHeader` flags; its
+    variable-length state/IP maps are noted but not expanded.
+  Payloads that match no known shape are reported with their raw leading bytes,
+  never guessed.
 * **Section context** — every begin/end/handler address is labelled with its
   containing section (`section:0xADDRESS`), and functions whose body spans two
   sections are flagged (`x-sect` column / `crosses_section` in JSON).
@@ -174,7 +187,8 @@ python -m unittest discover -s tests -p 'test_*.py' -v
 
 Tests are pure `unittest` (no third-party runner) and cover both bundled
 real-world samples and synthetic images built in `tests/_pebuilder.py` that
-exercise every UWOP, chaining, handlers, each malformation path, the
+exercise every UWOP, chaining, handler identification and payload decoding
+(scope tables, GS data, C++ FuncInfo, FH4), each malformation path, the
 address/section labelling, and the interactive TUI's navigation and rendering
 logic (driven without a real terminal).
 

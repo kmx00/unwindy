@@ -21,6 +21,15 @@ from .errors import (
     UnwindFormatError,
     UnwindyError,
 )
+from .handlers import (
+    CxxFuncInfo,
+    Fh4Info,
+    GsData,
+    HandlerData,
+    ImportResolver,
+    ScopeRecord,
+    decode_handlers,
+)
 from .pe import DataDirectory, PEFile, Section
 from .unwind import (
     RuntimeFunction,
@@ -31,7 +40,7 @@ from .unwind import (
     parse_unwind_info,
 )
 
-__version__ = "0.0.3"
+__version__ = "0.0.4"
 
 __all__ = [
     "__version__",
@@ -46,6 +55,13 @@ __all__ = [
     "UnwindOp",
     "UnwindFlag",
     "parse_unwind_info",
+    "HandlerData",
+    "ScopeRecord",
+    "GsData",
+    "CxxFuncInfo",
+    "Fh4Info",
+    "ImportResolver",
+    "decode_handlers",
     "Diagnostic",
     "DiagnosticBag",
     "Severity",
