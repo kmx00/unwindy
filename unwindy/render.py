@@ -1,0 +1,423 @@
+"""Text rendering: ANSI-colored tables, summaries and rich per-function detail.
+
+Pure standard library. Color auto-enables on a TTY (and is honored on modern
+Windows terminals) and respects ``NO_COLOR``/``--no-color``.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from typing import Callable, List, Optional, Sequence
+
+from .analyzer import Analysis
+from .errors import Diagnostic, Severity
+from .pe import PEFile
+from .unwind import RuntimeFunction, UnwindFlag, UnwindInfo, UnwindOp
+
+
+# --- color ------------------------------------------------------------------
+
+
+class Painter:
+    """Tiny ANSI helper. Padding must be applied *before* coloring so column
+    widths stay correct (escape codes are zero-width)."""
+
+    CODES = {
+        "reset": "0",
+        "bold": "1",
+        "dim": "2",
+        "red": "31",
+        "green": "32",
+        "yellow": "33",
+        "blue": "34",
+        "magenta": "35",
+        "cyan": "36",
+        "gray": "90",
+        "brred": "91",
+        "brgreen": "92",
+        "bryellow": "93",
+    }
+
+    def __init__(self, enabled: bool) -> None:
+        self.enabled = enabled
+
+    def wrap(self, text: str, *names: str) -> str:
+        if not self.enabled or not names:
+            return text
+        codes = ";".join(self.CODES[n] for n in names)
+        return f"\x1b[{codes}m{text}\x1b[0m"
+
+    def bold(self, t: str) -> str:
+        return self.wrap(t, "bold")
+
+    def dim(self, t: str) -> str:
+        return self.wrap(t, "dim")
+
+    def red(self, t: str) -> str:
+        return self.wrap(t, "red")
+
+    def green(self, t: str) -> str:
+        return self.wrap(t, "green")
+
+    def yellow(self, t: str) -> str:
+        return self.wrap(t, "yellow")
+
+    def cyan(self, t: str) -> str:
+        return self.wrap(t, "cyan")
+
+    def magenta(self, t: str) -> str:
+        return self.wrap(t, "magenta")
+
+    def gray(self, t: str) -> str:
+        return self.wrap(t, "gray")
+
+
+def _enable_windows_vt() -> None:
+    if os.name != "nt":
+        return
+    try:  # pragma: no cover - platform specific
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(handle, mode.value | 0x0004)
+    except Exception:
+        pass
+
+
+def make_painter(force: Optional[bool] = None) -> Painter:
+    if force is True:
+        _enable_windows_vt()
+        return Painter(True)
+    if force is False:
+        return Painter(False)
+    enabled = (
+        sys.stdout.isatty()
+        and os.environ.get("NO_COLOR") is None
+        and os.environ.get("TERM") != "dumb"
+    )
+    if enabled:
+        _enable_windows_vt()
+    return Painter(enabled)
+
+
+# --- generic table ----------------------------------------------------------
+
+
+def format_table(
+    headers: Sequence[str],
+    rows: Sequence[Sequence[object]],
+    aligns: Optional[Sequence[str]] = None,
+    painter: Optional[Painter] = None,
+    col_color: Optional[Sequence[Optional[Callable[[str, object], str]]]] = None,
+    gap: int = 2,
+) -> str:
+    cols = len(headers)
+    aligns = list(aligns) if aligns else ["l"] * cols
+    widths = [len(str(h)) for h in headers]
+    str_rows = [[str(c) for c in r] for r in rows]
+    for r in str_rows:
+        for i in range(cols):
+            widths[i] = max(widths[i], len(r[i]))
+
+    sep = " " * gap
+
+    def pad(s: str, w: int, a: str) -> str:
+        return s.rjust(w) if a == "r" else s.ljust(w)
+
+    out: List[str] = []
+    hcells = [pad(str(headers[i]), widths[i], aligns[i]) for i in range(cols)]
+    if painter:
+        hcells = [painter.bold(painter.cyan(c)) for c in hcells]
+    out.append(sep.join(hcells))
+    rule = sep.join(
+        (painter.dim("-" * widths[i]) if painter else "-" * widths[i])
+        for i in range(cols)
+    )
+    out.append(rule)
+    for ri, r in enumerate(str_rows):
+        cells = [pad(r[i], widths[i], aligns[i]) for i in range(cols)]
+        if col_color:
+            for i in range(cols):
+                fn = col_color[i] if i < len(col_color) else None
+                if fn is not None:
+                    cells[i] = fn(cells[i], rows[ri][i])
+        out.append(sep.join(cells))
+    return "\n".join(out)
+
+
+# --- summaries --------------------------------------------------------------
+
+
+def render_image_summary(analysis: Analysis, painter: Painter) -> str:
+    pe = analysis.pe
+    ed = analysis.exception_dir
+    p = painter
+    lines = [p.bold(p.cyan("Image"))]
+
+    def kv(k: str, v: str) -> str:
+        return f"  {p.gray(k + ':'):<28} {v}"
+
+    src = pe.source or "<memory>"
+    lines.append(kv("file", src))
+    lines.append(kv("machine", "AMD64 (x64)"))
+    lines.append(kv("type", "DLL" if pe.is_dll else "EXE/driver"))
+    lines.append(kv("image base", f"{pe.image_base:#018x}"))
+    lines.append(kv("entry point", f"rva {pe.address_of_entry_point:#x}"))
+    lines.append(kv("size of image", f"{pe.size_of_image:#x}"))
+    lines.append(kv("sections", str(pe.number_of_sections)))
+    if ed.present:
+        count = ed.size // 12
+        lines.append(
+            kv(
+                "exception dir",
+                f"rva {ed.virtual_address:#x} size {ed.size:#x} "
+                f"({count} RUNTIME_FUNCTION)",
+            )
+        )
+    else:
+        lines.append(kv("exception dir", p.yellow("absent")))
+    lines.append(kv("functions parsed", str(len(analysis.functions))))
+    lines.append(
+        kv(
+            "chained / handlers",
+            f"{analysis.chained_count} chained, {analysis.handler_count} handlers",
+        )
+    )
+    return "\n".join(lines)
+
+
+def render_sections(pe: PEFile, painter: Painter) -> str:
+    headers = ["#", "name", "rva", "vsize", "raw", "rawsize", "perms"]
+    rows = []
+    for s in pe.sections:
+        perms = "".join(
+            [
+                "r" if s.is_readable else "-",
+                "w" if s.is_writable else "-",
+                "x" if s.is_executable else "-",
+            ]
+        )
+        rows.append(
+            [
+                s.index,
+                s.name,
+                f"{s.virtual_address:#x}",
+                f"{s.virtual_size:#x}",
+                f"{s.raw_ptr:#x}",
+                f"{s.raw_size:#x}",
+                perms,
+            ]
+        )
+    aligns = ["r", "l", "r", "r", "r", "r", "l"]
+    return format_table(headers, rows, aligns, painter)
+
+
+def render_stats(analysis: Analysis, painter: Painter) -> str:
+    p = painter
+    out = [p.bold(p.cyan("Statistics"))]
+    vh = analysis.version_histogram()
+    out.append("  versions: " + ", ".join(f"v{k}={vh[k]}" for k in sorted(vh)))
+    out.append(
+        f"  chained: {analysis.chained_count}    handlers: {analysis.handler_count}"
+    )
+    hist = analysis.op_histogram()
+    if hist:
+        out.append(p.gray("  unwind operations:"))
+        width = max(len(k) for k in hist)
+        for op, cnt in sorted(hist.items(), key=lambda kv: (-kv[1], kv[0])):
+            bar = "#" * min(40, cnt * 40 // max(hist.values()))
+            out.append(f"    {op.ljust(width)}  {cnt:>6}  {p.dim(bar)}")
+    return "\n".join(out)
+
+
+# --- diagnostics ------------------------------------------------------------
+
+
+def render_diagnostics(diags: Sequence[Diagnostic], painter: Painter) -> str:
+    p = painter
+    warns = [d for d in diags if d.severity == Severity.WARNING]
+    errs = [d for d in diags if d.severity == Severity.ERROR]
+    if not warns and not errs:
+        return p.green("No warnings: exception data conforms to spec.")
+    out: List[str] = []
+    if errs:
+        out.append(p.bold(p.red(f"ERRORS ({len(errs)})")))
+        for d in errs:
+            loc = p.gray(f" @ {d.where}") if d.where else ""
+            out.append(f"  {p.red('x')} {p.bold(d.code)}: {d.message}{loc}")
+    if warns:
+        out.append(p.bold(p.yellow(f"WARNINGS ({len(warns)})")))
+        for d in warns:
+            loc = p.gray(f" @ {d.where}") if d.where else ""
+            out.append(f"  {p.yellow('!')} {p.bold(d.code)}: {d.message}{loc}")
+    return "\n".join(out)
+
+
+# --- function table ---------------------------------------------------------
+
+FUNC_COLUMNS = ["#", "begin", "end", "size", "prolog", "codes", "flags", "stack", "handler"]
+
+
+def _flags_label(ui: Optional[UnwindInfo]) -> str:
+    if ui is None:
+        return "-"
+    parts = []
+    if ui.is_chained:
+        parts.append("CHAIN")
+    if ui.has_exception_handler:
+        parts.append("EH")
+    if ui.has_termination_handler:
+        parts.append("UH")
+    return "+".join(parts) if parts else "."
+
+
+def function_row(pe: PEFile, f: RuntimeFunction, *, use_va: bool) -> List[object]:
+    ui = f.unwind_info
+    base = pe.image_base if use_va else 0
+    handler = "-"
+    if ui and ui.handler_rva:
+        handler = f"{base + ui.handler_rva:#x}" if use_va else f"{ui.handler_rva:#x}"
+    return [
+        "-" if f.index is None else f.index,
+        f"{base + f.begin_address:#x}",
+        f"{base + f.end_address:#x}",
+        f"{f.size:#x}",
+        f"{ui.size_of_prolog:#x}" if ui else "-",
+        ui.count_of_codes if ui else "-",
+        _flags_label(ui),
+        f"{ui.fixed_stack_alloc:#x}" if ui else "-",
+        handler,
+    ]
+
+
+def render_function_table(
+    pe: PEFile,
+    functions: Sequence[RuntimeFunction],
+    painter: Painter,
+    *,
+    use_va: bool = False,
+) -> str:
+    p = painter
+
+    def color_flags(padded: str, raw: object) -> str:
+        s = str(raw)
+        if "CHAIN" in s:
+            return p.magenta(padded)
+        if "EH" in s or "UH" in s:
+            return p.yellow(padded)
+        return p.dim(padded) if s == "." else padded
+
+    def color_handler(padded: str, raw: object) -> str:
+        return p.dim(padded) if str(raw) == "-" else p.yellow(padded)
+
+    rows = [function_row(pe, f, use_va=use_va) for f in functions]
+    aligns = ["r", "r", "r", "r", "r", "r", "l", "r", "r"]
+    col_color = [None, None, None, None, None, None, color_flags, None, color_handler]
+    return format_table(FUNC_COLUMNS, rows, aligns, p, col_color)
+
+
+# --- per-function detail ----------------------------------------------------
+
+_OP_COLOR = {
+    UnwindOp.PUSH_NONVOL: "green",
+    UnwindOp.ALLOC_SMALL: "yellow",
+    UnwindOp.ALLOC_LARGE: "yellow",
+    UnwindOp.SET_FPREG: "magenta",
+    UnwindOp.SAVE_NONVOL: "cyan",
+    UnwindOp.SAVE_NONVOL_FAR: "cyan",
+    UnwindOp.SAVE_XMM128: "blue",
+    UnwindOp.SAVE_XMM128_FAR: "blue",
+    UnwindOp.PUSH_MACHFRAME: "red",
+}
+
+
+def _render_unwind_info(
+    pe: PEFile, ui: UnwindInfo, painter: Painter, indent: str, use_va: bool
+) -> List[str]:
+    p = painter
+    out: List[str] = []
+    flags = " | ".join(ui.flag_names())
+    out.append(
+        indent
+        + p.gray("UNWIND_INFO ")
+        + f"@ rva {ui.rva:#x}  v{ui.version}  "
+        + p.bold(flags)
+    )
+    frame = "none"
+    if ui.frame_register:
+        frame = f"{ui.frame_register_name} + {ui.frame_offset_bytes:#x}"
+    out.append(
+        indent
+        + f"  prolog={ui.size_of_prolog:#x}  codes={ui.count_of_codes}  "
+        + f"frame={frame}  fixed-alloc={ui.fixed_stack_alloc:#x}"
+    )
+
+    if ui.codes:
+        out.append(indent + p.gray("  unwind codes (reverse-prolog / unwind order):"))
+        for c in ui.codes:
+            op = c.op_enum
+            mn = c.mnemonic
+            if op is not None and op in _OP_COLOR:
+                mn = p.wrap(mn.ljust(20), _OP_COLOR[op])
+            else:
+                mn = mn.ljust(20)
+            out.append(
+                indent
+                + f"    +{c.code_offset:#04x}  {mn}  {c.description}"
+            )
+
+    if ui.handler_rva is not None:
+        hsec = pe.section_for_rva(ui.handler_rva)
+        secname = hsec.name if hsec else "?"
+        va = f" (va {pe.image_base + ui.handler_rva:#x})" if use_va else ""
+        out.append(
+            indent
+            + p.yellow("  handler: ")
+            + f"{ui.handler_kind}  routine rva {ui.handler_rva:#x}{va} "
+            + p.gray(f"[{secname}]")
+        )
+        if ui.language_data_rva is not None:
+            out.append(
+                indent
+                + p.gray(f"  language-specific data rva {ui.language_data_rva:#x}")
+            )
+
+    if ui.chained_function is not None:
+        child = ui.chained_function
+        base = pe.image_base if use_va else 0
+        out.append(
+            indent
+            + p.magenta("  chained -> ")
+            + f"[{base + child.begin_address:#x}, {base + child.end_address:#x}) "
+            + p.gray(f"unwind@{child.unwind_info_address:#x}")
+        )
+        if child.unwind_info is not None:
+            out.extend(
+                _render_unwind_info(
+                    pe, child.unwind_info, painter, indent + "    ", use_va
+                )
+            )
+    return out
+
+
+def render_function_detail(
+    pe: PEFile, f: RuntimeFunction, painter: Painter, *, use_va: bool = False
+) -> str:
+    p = painter
+    base = pe.image_base if use_va else 0
+    idx = "?" if f.index is None else f.index
+    header = (
+        p.bold(p.cyan(f"Function #{idx}"))
+        + f"  [{base + f.begin_address:#x}, {base + f.end_address:#x})  "
+        + p.gray(f"size={f.size:#x}  unwind@{f.unwind_info_address:#x}")
+    )
+    out = [header]
+    if f.unwind_info is None:
+        out.append("  " + p.red("<unwind info failed to parse>"))
+        return "\n".join(out)
+    out.extend(_render_unwind_info(pe, f.unwind_info, painter, "  ", use_va))
+    return "\n".join(out)
