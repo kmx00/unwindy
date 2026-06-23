@@ -9,7 +9,7 @@ from typing import List, Optional, Sequence
 
 from . import __version__
 from .analyzer import Analysis, analyze
-from .errors import PEFormatError, UnwindFormatError, UnwindyError
+from .errors import PEFormatError, UnwindyError
 from .pe import PEFile
 from .render import (
     make_painter,

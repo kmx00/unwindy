@@ -13,7 +13,7 @@ from typing import Callable, List, Optional, Sequence
 from .analyzer import Analysis
 from .errors import Diagnostic, Severity
 from .pe import PEFile
-from .unwind import RuntimeFunction, UnwindFlag, UnwindInfo, UnwindOp
+from .unwind import RuntimeFunction, UnwindInfo, UnwindOp
 
 
 # --- color ------------------------------------------------------------------

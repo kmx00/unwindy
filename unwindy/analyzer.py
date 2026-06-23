@@ -9,9 +9,9 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from .errors import DiagnosticBag, Severity, UnwindFormatError
+from .errors import DiagnosticBag, UnwindFormatError
 from .pe import DataDirectory, PEFile
-from .unwind import RuntimeFunction, UnwindInfo, UnwindOp, parse_unwind_info
+from .unwind import RuntimeFunction, UnwindInfo, parse_unwind_info
 
 RUNTIME_FUNCTION_SIZE = 12
 

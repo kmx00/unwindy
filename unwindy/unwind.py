@@ -15,7 +15,7 @@ import struct
 from dataclasses import dataclass, field
 from typing import List, Optional, Set
 
-from .errors import DiagnosticBag, Severity, UnwindFormatError
+from .errors import DiagnosticBag, UnwindFormatError
 from .pe import PEFile
 
 # General-purpose register encoding shared by OpInfo and FrameRegister.
