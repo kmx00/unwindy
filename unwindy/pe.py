@@ -231,6 +231,10 @@ class PEFile:
                 return sec
         return None
 
+    def section_name(self, rva: int, default: str = "??") -> str:
+        sec = self.section_for_rva(rva)
+        return sec.name if sec is not None else default
+
     def rva_to_offset(self, rva: int) -> int:
         """Translate an RVA to a file offset, raising if it is not backed by
         on-disk bytes."""

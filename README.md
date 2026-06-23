@@ -1,10 +1,11 @@
 # unwindy
 
-A slim, **zero-dependency** CLI for inspecting x64 (PE64) exception / unwind
-information in rich detail. It decodes the `.pdata` `RUNTIME_FUNCTION` table and
-every `UNWIND_INFO` / `UNWIND_CODE` (UWOP) record, resolves chained unwind info,
-surfaces language-specific handlers, and loudly warns about anything that looks
-off — while raising on data that violates the spec.
+A slim, **zero-dependency** CLI **and interactive TUI** for inspecting x64
+(PE64) exception / unwind information in rich detail. It decodes the `.pdata`
+`RUNTIME_FUNCTION` table and every `UNWIND_INFO` / `UNWIND_CODE` (UWOP) record,
+resolves chained unwind info, surfaces language-specific handlers, and loudly
+warns about anything that looks off — while raising on data that violates the
+spec.
 
 Pure Python standard library. No `lief`, no `pefile`, no `rich`. Runs on Linux
 and Windows with any CPython ≥ 3.9.
@@ -17,10 +18,18 @@ unwindy reads the PE straight off disk, validates it, and prints the answer.
 
 ## Install / run
 
-No install required:
+No install required. Point it at one binary, several, or a directory of `*.bin`:
 
 ```sh
-python -m unwindy path/to/binary.exe
+python -m unwindy path/to/binary.exe      # one image
+python -m unwindy samples/                 # every *.bin in a directory
+python -m unwindy a.dll b.exe c.bin        # several at once
+```
+
+Run interactively (the default when stdout is a terminal):
+
+```sh
+python -m unwindy samples/                 # opens the TUI
 ```
 
 Or install the console script:
@@ -30,18 +39,43 @@ pip install -e .
 unwindy path/to/binary.exe
 ```
 
-## Usage
+## Interactive TUI
+
+When you run unwindy in a terminal it launches a slim, scrollable terminal UI
+(no `curses`, no third-party packages -- raw `msvcrt` on Windows, `termios` on
+POSIX, ANSI everywhere). Pass `-i`/`--tui` to force it, `--no-tui` to never use
+it.
+
+* **File picker** -- when given more than one binary (or a directory), pick which
+  image to inspect; each is analyzed lazily on open.
+* **Function list** -- paginated and scrollable over every `RUNTIME_FUNCTION`.
+  Begin/end are shown as `section:0xADDRESS`. An **`x-sect`** column flags (in
+  red, as `A->B`) any function whose body spans two sections.
+* **Inspect** -- `Enter` opens the full decoded detail (prolog unwind codes,
+  handler, and the resolved chain), itself scrollable; `Left`/`Right` step to the
+  previous/next function.
 
 ```
-unwindy [path] [view] [filters] [output]
+  up / down (k / j)     move          Enter       inspect selected function
+  PgUp / PgDn           page          Left/Right  prev/next (in detail)
+  Home / End (g / G)    jump          w           diagnostics (warnings/errors)
+  v                     RVA <-> VA    h or ?      help
+  Esc                   back / quit   q           quit
+```
+
+## Non-interactive usage
+
+```
+unwindy [paths...] [view] [filters] [output]
 
 views
-  (default)            function table
+  (default)            function table (or the TUI when attached to a terminal)
+  -i, --tui            force the interactive UI;  --no-tui forces plain output
   -d, --detail [IDX..] full per-function detail (all, or specific .pdata indices)
   -S, --sections       section table
   -s, --stats          version / op histograms
   --summary-only       image summary only
-  --json               machine-readable JSON
+  --json               machine-readable JSON (an array when given many files)
 
 filtering / sorting
   --sort {index,begin,end,size,prolog,codes,alloc,handler,chained}
@@ -63,14 +97,14 @@ output
 ### Examples
 
 ```sh
-# Overview + first functions
-python -m unwindy app.exe --limit 20
+# Overview + first functions (force plain output)
+python -m unwindy app.exe --no-tui --limit 20
 
 # Full detail of one function (with its chained parent and handler)
-python -m unwindy app.exe -d 42
+python -m unwindy app.exe --no-tui -d 42
 
 # Every function that establishes a frame pointer, largest first
-python -m unwindy app.exe --has-op SET_FPREG --sort size -r
+python -m unwindy app.exe --no-tui --has-op SET_FPREG --sort size -r
 
 # Pipe structured data somewhere
 python -m unwindy app.exe --json --only-handlers > handlers.json
@@ -90,6 +124,9 @@ python -m unwindy app.exe --json --only-handlers > handlers.json
   depth protection.
 * **Handlers** — `UNW_FLAG_EHANDLER` / `UNW_FLAG_UHANDLER` handler RVA and the
   RVA of the trailing language-specific data.
+* **Section context** — every begin/end/handler address is labelled with its
+  containing section (`section:0xADDRESS`), and functions whose body spans two
+  sections are flagged (`x-sect` column / `crosses_section` in JSON).
 
 ## Conformance: raise vs. warn
 
@@ -131,9 +168,11 @@ bash scripts/dev.sh          # run tests + a smoke analysis of the sample
 python -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-Tests are pure `unittest` (no third-party runner) and cover both the bundled
-real-world sample and synthetic images built in `tests/_pebuilder.py` that
-exercise every UWOP, chaining, handlers, and each malformation path.
+Tests are pure `unittest` (no third-party runner) and cover both bundled
+real-world samples and synthetic images built in `tests/_pebuilder.py` that
+exercise every UWOP, chaining, handlers, each malformation path, the
+address/section labelling, and the interactive TUI's navigation and rendering
+logic (driven without a real terminal).
 
 ## References
 

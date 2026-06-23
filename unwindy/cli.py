@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from typing import List, Optional, Sequence
 
@@ -40,7 +41,11 @@ def build_parser() -> argparse.ArgumentParser:
         prog="unwindy",
         description="View x64 (PE64) exception/unwind information in rich detail.",
     )
-    p.add_argument("path", nargs="?", help="path to a PE64 image")
+    p.add_argument(
+        "path",
+        nargs="*",
+        help="one or more PE64 images, or directories scanned for *.bin",
+    )
     p.add_argument("--version", action="version", version=f"unwindy {__version__}")
 
     view = p.add_argument_group("views")
@@ -53,6 +58,15 @@ def build_parser() -> argparse.ArgumentParser:
     view.add_argument("-s", "--stats", action="store_true", help="show statistics")
     view.add_argument("--summary-only", action="store_true", help="image summary only")
     view.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    tui = view.add_mutually_exclusive_group()
+    tui.add_argument(
+        "-i", "--tui", dest="tui", action="store_true", default=None,
+        help="interactive scrollable terminal UI (default when run in a TTY)",
+    )
+    tui.add_argument(
+        "--no-tui", dest="tui", action="store_false",
+        help="never launch the interactive UI; print to stdout instead",
+    )
 
     filt = p.add_argument_group("filtering / sorting")
     filt.add_argument("--sort", choices=sorted(SORT_KEYS), default="index")
@@ -151,11 +165,17 @@ def _unwind_to_dict(pe: PEFile, ui: Optional[UnwindInfo]) -> Optional[dict]:
 
 
 def _func_to_dict(pe: PEFile, f: RuntimeFunction) -> dict:
+    from .render import func_section_info
+
+    begin_sec, end_sec, crosses = func_section_info(pe, f)
     return {
         "index": f.index,
         "begin_rva": f.begin_address,
         "end_rva": f.end_address,
         "begin_va": pe.image_base + f.begin_address,
+        "begin_section": begin_sec,
+        "end_section": end_sec,
+        "crosses_section": crosses,
         "size": f.size,
         "unwind_info_address": f.unwind_info_address,
         "unwind_info": _unwind_to_dict(pe, f.unwind_info),
@@ -215,48 +235,127 @@ def build_json(analysis: Analysis, functions: Sequence[RuntimeFunction]) -> dict
 # --- main -------------------------------------------------------------------
 
 
-def run(argv: Optional[Sequence[str]] = None) -> int:
-    args = build_parser().parse_args(argv)
-    if not args.path:
-        build_parser().error("a PE64 path is required")
+def _collect_files(paths: Sequence[str]) -> List[str]:
+    """Expand directories to their ``*.bin`` members; keep files as given.
 
+    Order is preserved and duplicates removed."""
+    import glob
+
+    out: List[str] = []
+    seen = set()
+    for pth in paths:
+        if os.path.isdir(pth):
+            members = sorted(glob.glob(os.path.join(pth, "*.bin")))
+        else:
+            members = [pth]
+        for m in members:
+            if m not in seen:
+                seen.add(m)
+                out.append(m)
+    return out
+
+
+def _load(path: str, args: argparse.Namespace):
+    """Return ``(pe, analysis)`` or print an error and return ``(None, None)``."""
     try:
-        pe = PEFile.from_path(args.path)
+        pe = PEFile.from_path(path)
     except FileNotFoundError:
-        print(f"unwindy: cannot open {args.path!r}: no such file", file=sys.stderr)
-        return 2
+        print(f"unwindy: cannot open {path!r}: no such file", file=sys.stderr)
+        return None, None
     except OSError as exc:
-        print(f"unwindy: cannot read {args.path!r}: {exc}", file=sys.stderr)
-        return 2
+        print(f"unwindy: cannot read {path!r}: {exc}", file=sys.stderr)
+        return None, None
     except PEFormatError as exc:
-        print(f"unwindy: not a valid PE64: {exc}", file=sys.stderr)
-        return 2
-
+        print(f"unwindy: {path}: not a valid PE64: {exc}", file=sys.stderr)
+        return None, None
     try:
         analysis = analyze(pe, strict=not args.lenient)
     except UnwindyError as exc:
-        print(f"unwindy: spec violation: {exc}", file=sys.stderr)
+        print(f"unwindy: {path}: spec violation: {exc}", file=sys.stderr)
         print(
             "unwindy: re-run with --lenient to keep going and list every issue.",
             file=sys.stderr,
         )
+        return None, None
+    return pe, analysis
+
+
+def run(argv: Optional[Sequence[str]] = None) -> int:
+    args = build_parser().parse_args(argv)
+    if not args.path:
+        build_parser().error("at least one PE64 path (or directory) is required")
+
+    files = _collect_files(args.path)
+    if not files:
+        print("unwindy: no input files (no *.bin found in given directories)",
+              file=sys.stderr)
         return 2
 
-    functions = select_functions(analysis, args)
+    explicit_view = (
+        args.json or args.sections or args.stats or args.summary_only
+        or args.table or args.detail is not None
+    )
+    want_tui = args.tui is True or (
+        args.tui is None and not explicit_view
+        and sys.stdout.isatty() and sys.stdin.isatty()
+    )
+    if want_tui:
+        from .tui import run_tui
+
+        # Defer hard parse errors to the UI: it loads each file leniently.
+        return run_tui(files, use_va=args.va)
 
     if args.json:
-        json.dump(build_json(analysis, functions), sys.stdout, indent=2)
-        sys.stdout.write("\n")
-        return _exit_code(analysis, args)
+        return _run_json(files, args)
+    return _run_static(files, args)
 
+
+def _run_json(files: Sequence[str], args: argparse.Namespace) -> int:
+    docs = []
+    code = 0
+    for path in files:
+        pe, analysis = _load(path, args)
+        if pe is None:
+            code = max(code, 2)
+            continue
+        functions = select_functions(analysis, args)
+        docs.append(build_json(analysis, functions))
+        code = max(code, _exit_code(analysis, args))
+    payload = docs if len(files) > 1 else (docs[0] if docs else {})
+    json.dump(payload, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+    return code
+
+
+def _run_static(files: Sequence[str], args: argparse.Namespace) -> int:
     painter = make_painter(args.color)
-    blocks: List[str] = []
+    code = 0
+    multi = len(files) > 1
+    sep = ""
+    for path in files:
+        pe, analysis = _load(path, args)
+        if pe is None:
+            code = max(code, 2)
+            continue
+        if multi:
+            print(sep + painter.bold(painter.cyan(f"==> {path} <==")))
+        sep = "\n"
+        functions = select_functions(analysis, args)
+        print("\n\n".join(_render_blocks(pe, analysis, functions, args, painter)))
+        code = max(code, _exit_code(analysis, args))
+    return code
 
+
+def _render_blocks(
+    pe: PEFile,
+    analysis: Analysis,
+    functions: Sequence[RuntimeFunction],
+    args: argparse.Namespace,
+    painter,
+) -> List[str]:
+    blocks: List[str] = []
     if not args.quiet:
         blocks.append(render_image_summary(analysis, painter))
-
-    # Diagnostics are always surfaced loudly unless we are in summary-only mode
-    # that the user explicitly narrowed.
     blocks.append(render_diagnostics(list(analysis.diagnostics), painter))
 
     if args.summary_only:
@@ -272,11 +371,8 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         for f in wanted:
             blocks.append(render_function_detail(pe, f, painter, use_va=args.va))
     else:
-        # default: the function table
         if functions:
-            blocks.append(
-                render_function_table(pe, functions, painter, use_va=args.va)
-            )
+            blocks.append(render_function_table(pe, functions, painter, use_va=args.va))
             if len(functions) < len(analysis.functions):
                 blocks.append(
                     painter.gray(
@@ -286,9 +382,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
                 )
         else:
             blocks.append(painter.yellow("No functions to show."))
-
-    print("\n\n".join(b for b in blocks if b))
-    return _exit_code(analysis, args)
+    return [b for b in blocks if b]
 
 
 def _detail_subset(

@@ -37,6 +37,7 @@ class Painter:
         "brred": "91",
         "brgreen": "92",
         "bryellow": "93",
+        "reverse": "7",
     }
 
     def __init__(self, enabled: bool) -> None:
@@ -71,6 +72,9 @@ class Painter:
 
     def gray(self, t: str) -> str:
         return self.wrap(t, "gray")
+
+    def reverse(self, t: str) -> str:
+        return self.wrap(t, "reverse")
 
 
 def _enable_windows_vt() -> None:
@@ -259,7 +263,33 @@ def render_diagnostics(diags: Sequence[Diagnostic], painter: Painter) -> str:
 
 # --- function table ---------------------------------------------------------
 
-FUNC_COLUMNS = ["#", "begin", "end", "size", "prolog", "codes", "flags", "stack", "handler"]
+FUNC_COLUMNS = [
+    "#", "begin", "end", "size", "prolog", "codes", "flags", "stack", "x-sect",
+    "handler",
+]
+
+
+def addr_label(pe: PEFile, rva: int, *, use_va: bool) -> str:
+    """Render an address as ``section:0xRVA`` (or VA when ``use_va``)."""
+    name = pe.section_name(rva)
+    value = pe.image_base + rva if use_va else rva
+    return f"{name}:{value:#x}"
+
+
+def func_section_info(pe: PEFile, f: RuntimeFunction):
+    """Return ``(begin_section, end_section, crosses)``.
+
+    The end section is taken from the function's *last* byte (``end - 1``) so a
+    function that merely abuts the next section is not mis-flagged."""
+    begin_sec = pe.section_name(f.begin_address)
+    last = f.end_address - 1 if f.end_address > f.begin_address else f.begin_address
+    end_sec = pe.section_name(last)
+    return begin_sec, end_sec, begin_sec != end_sec
+
+
+def xsect_label(pe: PEFile, f: RuntimeFunction) -> str:
+    begin_sec, end_sec, crosses = func_section_info(pe, f)
+    return f"{begin_sec}->{end_sec}" if crosses else "-"
 
 
 def _flags_label(ui: Optional[UnwindInfo]) -> str:
@@ -277,19 +307,19 @@ def _flags_label(ui: Optional[UnwindInfo]) -> str:
 
 def function_row(pe: PEFile, f: RuntimeFunction, *, use_va: bool) -> List[object]:
     ui = f.unwind_info
-    base = pe.image_base if use_va else 0
     handler = "-"
     if ui and ui.handler_rva:
-        handler = f"{base + ui.handler_rva:#x}" if use_va else f"{ui.handler_rva:#x}"
+        handler = addr_label(pe, ui.handler_rva, use_va=use_va)
     return [
         "-" if f.index is None else f.index,
-        f"{base + f.begin_address:#x}",
-        f"{base + f.end_address:#x}",
+        addr_label(pe, f.begin_address, use_va=use_va),
+        addr_label(pe, f.end_address, use_va=use_va),
         f"{f.size:#x}",
         f"{ui.size_of_prolog:#x}" if ui else "-",
         ui.count_of_codes if ui else "-",
         _flags_label(ui),
         f"{ui.fixed_stack_alloc:#x}" if ui else "-",
+        xsect_label(pe, f),
         handler,
     ]
 
@@ -314,9 +344,13 @@ def render_function_table(
     def color_handler(padded: str, raw: object) -> str:
         return p.dim(padded) if str(raw) == "-" else p.yellow(padded)
 
+    def color_xsect(padded: str, raw: object) -> str:
+        return p.dim(padded) if str(raw) == "-" else p.red(padded)
+
     rows = [function_row(pe, f, use_va=use_va) for f in functions]
-    aligns = ["r", "r", "r", "r", "r", "r", "l", "r", "r"]
-    col_color = [None, None, None, None, None, None, color_flags, None, color_handler]
+    aligns = ["r", "l", "l", "r", "r", "r", "l", "r", "l", "l"]
+    col_color = [None, None, None, None, None, None, color_flags, None,
+                 color_xsect, color_handler]
     return format_table(FUNC_COLUMNS, rows, aligns, p, col_color)
 
 
@@ -388,11 +422,12 @@ def _render_unwind_info(
 
     if ui.chained_function is not None:
         child = ui.chained_function
-        base = pe.image_base if use_va else 0
+        begin_lbl = addr_label(pe, child.begin_address, use_va=use_va)
+        end_lbl = addr_label(pe, child.end_address, use_va=use_va)
         out.append(
             indent
             + p.magenta("  chained -> ")
-            + f"[{base + child.begin_address:#x}, {base + child.end_address:#x}) "
+            + f"[{begin_lbl}, {end_lbl}) "
             + p.gray(f"unwind@{child.unwind_info_address:#x}")
         )
         if child.unwind_info is not None:
@@ -408,12 +443,16 @@ def render_function_detail(
     pe: PEFile, f: RuntimeFunction, painter: Painter, *, use_va: bool = False
 ) -> str:
     p = painter
-    base = pe.image_base if use_va else 0
     idx = "?" if f.index is None else f.index
+    begin_lbl = addr_label(pe, f.begin_address, use_va=use_va)
+    end_lbl = addr_label(pe, f.end_address, use_va=use_va)
+    begin_sec, end_sec, crosses = func_section_info(pe, f)
+    xsect = p.red(f"  CROSS-SECTION {begin_sec}->{end_sec}") if crosses else ""
     header = (
         p.bold(p.cyan(f"Function #{idx}"))
-        + f"  [{base + f.begin_address:#x}, {base + f.end_address:#x})  "
+        + f"  [{begin_lbl}, {end_lbl})  "
         + p.gray(f"size={f.size:#x}  unwind@{f.unwind_info_address:#x}")
+        + xsect
     )
     out = [header]
     if f.unwind_info is None:
