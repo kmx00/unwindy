@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "unwindy"
+version = "0.0.1"
+description = "Slim PE64 x64 exception/unwind information viewer (no heavy deps)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "unwindy" }]
+keywords = ["pe", "pe64", "x64", "unwind", "exception", "uwop", "rtl", "seh"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Disassemblers",
+    "Operating System :: OS Independent",
+]
+# Intentionally zero runtime dependencies: pure standard library.
+dependencies = []
+
+[project.scripts]
+unwindy = "unwindy.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/unwindy/unwindy"
+
+[tool.setuptools]
+packages = ["unwindy"]
+
+[tool.setuptools.package-data]
+unwindy = ["py.typed"]
