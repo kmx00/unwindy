@@ -31,6 +31,7 @@ from .handlers import (
     decode_handlers,
 )
 from .pe import DataDirectory, PEFile, Section
+from .trampolines import StartTrampoline, annotate_trampolines, peel_start
 from .unwind import (
     RuntimeFunction,
     UnwindCode,
@@ -40,7 +41,7 @@ from .unwind import (
     parse_unwind_info,
 )
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"
 
 __all__ = [
     "__version__",
@@ -62,6 +63,9 @@ __all__ = [
     "Fh4Info",
     "ImportResolver",
     "decode_handlers",
+    "StartTrampoline",
+    "peel_start",
+    "annotate_trampolines",
     "Diagnostic",
     "DiagnosticBag",
     "Severity",

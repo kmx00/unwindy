@@ -266,7 +266,7 @@ def render_diagnostics(diags: Sequence[Diagnostic], painter: Painter) -> str:
 
 FUNC_COLUMNS = [
     "#", "begin", "end", "size", "prolog", "codes", "ops", "flags", "stack",
-    "x-sect", "handler",
+    "x-sect", "handler", "real-start",
 ]
 
 
@@ -291,6 +291,17 @@ def func_section_info(pe: PEFile, f: RuntimeFunction):
 def xsect_label(pe: PEFile, f: RuntimeFunction) -> str:
     begin_sec, end_sec, crosses = func_section_info(pe, f)
     return f"{begin_sec}->{end_sec}" if crosses else "-"
+
+
+def trampoline_label(pe: PEFile, f: RuntimeFunction, *, use_va: bool) -> str:
+    """Compact ``real-start`` cell: the peeled real entry, or an import name."""
+    t = f.trampoline
+    if t is None:
+        return "-"
+    if t.kind == "import":
+        name = t.import_name()
+        return f"imp:{name}" if name else f"imp:{t.import_slot:#x}"
+    return addr_label(pe, t.real_start, use_va=use_va)
 
 
 def _flags_label(ui: Optional[UnwindInfo]) -> str:
@@ -362,6 +373,7 @@ def function_row(pe: PEFile, f: RuntimeFunction, *, use_va: bool) -> List[object
         f"{ui.fixed_stack_alloc:#x}" if ui else "-",
         xsect_label(pe, f),
         handler,
+        trampoline_label(pe, f, use_va=use_va),
     ]
 
 
@@ -391,11 +403,14 @@ def render_function_table(
     def color_ops(padded: str, raw: object) -> str:
         return p.dim(padded) if str(raw) in ("-", ".") else p.gray(padded)
 
+    def color_tramp(padded: str, raw: object) -> str:
+        return p.dim(padded) if str(raw) == "-" else p.cyan(padded)
+
     rows = [function_row(pe, f, use_va=use_va) for f in functions]
-    #         #    begin end  size prol code ops        flags        stack xsect handler
-    aligns = ["r", "l", "l", "r", "r", "r", "l", "l", "r", "l", "l"]
+    #         #    begin end  size prol code ops    flags stack xsect handler real-start
+    aligns = ["r", "l", "l", "r", "r", "r", "l", "l", "r", "l", "l", "l"]
     col_color = [None, None, None, None, None, None, color_ops, color_flags,
-                 None, color_xsect, color_handler]
+                 None, color_xsect, color_handler, color_tramp]
     return format_table(FUNC_COLUMNS, rows, aligns, p, col_color)
 
 
@@ -572,6 +587,26 @@ def _render_unwind_info(
     return out
 
 
+def _render_trampoline(pe: PEFile, t, p: Painter, use_va: bool) -> List[str]:
+    """One line describing a peeled start trampoline, if any."""
+    if t is None:
+        return []
+
+    def a(rva: int) -> str:
+        return addr_label(pe, rva, use_va=use_va)
+
+    if t.kind == "import":
+        name = t.import_name()
+        target = name if name else f"unresolved IAT slot {t.import_slot:#x}"
+        return [p.cyan("  trampoline: ") + f"import stub -> {target}"]
+    line = p.cyan("  trampoline: ") + " -> ".join(a(r) for r in t.chain)
+    if t.real_start_index is not None:
+        line += p.gray(f"  (real start = func #{t.real_start_index})")
+    if t.crosses_segment and t.transition_rva is not None:
+        line += p.red(f"  [segment transition at {a(t.transition_rva)}]")
+    return [line]
+
+
 def render_function_detail(
     pe: PEFile, f: RuntimeFunction, painter: Painter, *, use_va: bool = False
 ) -> str:
@@ -588,6 +623,7 @@ def render_function_detail(
         + xsect
     )
     out = [header]
+    out.extend(_render_trampoline(pe, f.trampoline, p, use_va))
     if f.unwind_info is None:
         out.append("  " + p.red("<unwind info failed to parse>"))
         return "\n".join(out)

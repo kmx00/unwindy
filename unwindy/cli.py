@@ -180,6 +180,7 @@ def _func_to_dict(pe: PEFile, f: RuntimeFunction) -> dict:
         "size": f.size,
         "unwind_info_address": f.unwind_info_address,
         "unwind_info": _unwind_to_dict(pe, f.unwind_info),
+        "trampoline": f.trampoline.to_dict() if f.trampoline is not None else None,
     }
 
 

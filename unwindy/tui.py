@@ -36,8 +36,8 @@ ENTER, ESC, BACKSPACE = "ENTER", "ESC", "BACKSPACE"
 TAB, BACKTAB = "TAB", "BACKTAB"
 
 # Column alignment, parallel to render.FUNC_COLUMNS:
-#         #    begin end  size prol code ops  flags stk  xsect handler
-_ALIGNS = ["r", "l", "l", "r", "r", "r", "l", "l", "r", "l", "l"]
+#         #    begin end  size prol code ops  flags stk  xsect handler real-start
+_ALIGNS = ["r", "l", "l", "r", "r", "r", "l", "l", "r", "l", "l", "l"]
 
 
 # --- ANSI-aware string helpers ----------------------------------------------
@@ -642,6 +642,9 @@ class TuiApp:
                 return (1 if func_section_info(pe, f)[2] else 0, f.begin_address)
             if col == 10:  # handler
                 return u.handler_rva if (u and u.handler_rva) else -1
+            if col == 11:  # real-start
+                t = f.trampoline
+                return (1 if t else 0, t.real_start if t else f.begin_address)
             return f.begin_address
 
         return key

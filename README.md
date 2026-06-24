@@ -50,8 +50,9 @@ it.
   image to inspect; each is analyzed lazily on open.
 * **Function list** -- paginated and scrollable over every `RUNTIME_FUNCTION`.
   Begin/end are shown as `section:0xADDRESS`. An **`ops`** column digests the
-  prolog (e.g. `4push sub 0x28 3xmm`) and an **`x-sect`** column flags (in red,
-  as `A->B`) any function whose body spans two sections.
+  prolog (e.g. `4push sub 0x28 3xmm`), an **`x-sect`** column flags (in red,
+  as `A->B`) any function whose body spans two sections, and a **`real-start`**
+  column peels function-start trampolines to the real entry point.
 * **Sort mode** -- press `s` (or `Tab`) to enter an interactive column sorter:
   `Tab`/`<-`/`->` move between columns, `Enter` sorts by the highlighted column
   and toggles ascending/descending; the active sort is shown in the title bar.
@@ -141,6 +142,11 @@ python -m unwindy app.exe --json --only-handlers > handlers.json
     variable-length state/IP maps are noted but not expanded.
   Payloads that match no known shape are reported with their raw leading bytes,
   never guessed.
+* **Start trampolines** — when a function begins at a forwarding stub (an
+  incremental-link / ICF / guard thunk, a tail-call-only wrapper, or a
+  `jmp [rip]` import stub), the `jmp` chain is peeled to the real entry point.
+  The `real-start` column / `trampoline` JSON field show the peeled RVA, and any
+  **segment transition** (the hop that lands in a different section) is flagged.
 * **Section context** — every begin/end/handler address is labelled with its
   containing section (`section:0xADDRESS`), and functions whose body spans two
   sections are flagged (`x-sect` column / `crosses_section` in JSON).
@@ -188,8 +194,8 @@ python -m unittest discover -s tests -p 'test_*.py' -v
 Tests are pure `unittest` (no third-party runner) and cover both bundled
 real-world samples and synthetic images built in `tests/_pebuilder.py` that
 exercise every UWOP, chaining, handler identification and payload decoding
-(scope tables, GS data, C++ FuncInfo, FH4), each malformation path, the
-address/section labelling, and the interactive TUI's navigation and rendering
+(scope tables, GS data, C++ FuncInfo, FH4), start-trampoline peeling, each
+malformation path, the address/section labelling, and the interactive TUI's
 logic (driven without a real terminal).
 
 ## References

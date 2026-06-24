@@ -20,6 +20,7 @@ from .pe import PEFile
 
 if TYPE_CHECKING:
     from .handlers import HandlerData
+    from .trampolines import StartTrampoline
 
 # General-purpose register encoding shared by OpInfo and FrameRegister.
 GP_REGISTERS = (
@@ -100,6 +101,7 @@ class RuntimeFunction:
     unwind_info_address: int
     index: Optional[int] = None  # position in .pdata; None for chained parents
     unwind_info: Optional["UnwindInfo"] = None
+    trampoline: Optional["StartTrampoline"] = None
 
     @property
     def size(self) -> int:

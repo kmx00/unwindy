@@ -125,6 +125,25 @@ Decode language-specific exception-handler payloads (`unwindy/handlers.py`).
       28 `__CxxFrameHandler4` (FH4), 4 GS-wrapped FH4, 107 unrecognized local
       handlers, with **0** warnings.
 
+## v0.0.5 - DONE
+
+Peel function-start trampolines to the real entry point (`unwindy/trampolines.py`).
+
+- [x] Detect when a `RUNTIME_FUNCTION` begins at a forwarding stub and follow the
+      `jmp` chain: `e9`/`eb` near jumps to local code, `ff 25` `jmp [rip]` import
+      stubs (named via the import table). An intra-function jump (target inside
+      the function's own `[begin, end)`) is ordinary control flow, never a
+      trampoline; `e8` `call` tails are not mistaken for jumps.
+- [x] Record the peeled `real_start`, the full hop chain, the real start's own
+      pdata index, and any **segment transition** (the first hop landing in a
+      different section), with a cycle/hop guard.
+- [x] Surfaced as a `real-start` function-table column (CLI + TUI, sortable), a
+      `trampoline:` line in the detail view, and a `trampoline` object in JSON.
+- [x] 131 unit tests, all passing (+9): synthetic local / cross-section / chained
+      / short-jump / import / intra-function / plain fixtures, plus both samples
+      (`b325...` has exactly one `jmp [rip]` import stub at func #901 -> IAT slot
+      `0x70020`; `602314...` has none).
+
 ## Backlog / extra credit
 - [x] Decode language-specific handler payloads (`__C_specific_handler` scope
       tables, `__GSHandlerCheck`, MSVC C++ `FuncInfo`).  *(v0.0.4)*
