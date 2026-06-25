@@ -25,8 +25,10 @@ from .render import (
     function_row,
     func_section_info,
     render_diagnostics,
+    render_flow_lines,
     render_function_detail,
 )
+from .flow import trace_flow
 from .unwind import RuntimeFunction
 
 # Key tokens returned by the readers.
@@ -34,6 +36,7 @@ UP, DOWN, LEFT, RIGHT = "UP", "DOWN", "LEFT", "RIGHT"
 PGUP, PGDN, HOME, END = "PGUP", "PGDN", "HOME", "END"
 ENTER, ESC, BACKSPACE = "ENTER", "ESC", "BACKSPACE"
 TAB, BACKTAB = "TAB", "BACKTAB"
+SHIFT_ENTER = "SHIFT_ENTER"
 
 # Column alignment, parallel to render.FUNC_COLUMNS:
 #         #    begin end  size prol code ops  flags stk  xsect handler real-start
@@ -124,7 +127,7 @@ class _PosixKeyReader:
             r, _, _ = select.select([self._fd], [], [], 0.02)
             if not r:
                 return ESC
-            seq = os.read(self._fd, 5)
+            seq = os.read(self._fd, 10)
             return _decode_posix_seq(seq)
         return _decode_byte(ch[0])
 
@@ -139,6 +142,12 @@ def _decode_posix_seq(seq: bytes) -> str:
         }
         if body[:1] in simple:
             return simple[body[:1]]
+        # Enter with modifiers: kitty/fixterms CSI-u (\x1b[13;2u) and xterm
+        # modifyOtherKeys (\x1b[27;2;13~).  Any modifier on Return -> SHIFT_ENTER.
+        if body[-1:] == "u":
+            return _decode_modified_enter(body[:-1], code_first=True)
+        if body[-1:] == "~" and ";" in body:
+            return _decode_modified_enter(body[:-1], code_first=False)
         # \x1b[<num>~
         num = ""
         for c in body:
@@ -149,6 +158,25 @@ def _decode_posix_seq(seq: bytes) -> str:
         mapping = {"1": HOME, "7": HOME, "4": END, "8": END, "5": PGUP, "6": PGDN}
         return mapping.get(num, ESC)
     return ESC
+
+
+def _decode_modified_enter(body: str, *, code_first: bool) -> str:
+    """Decode a CSI ``code;mod u`` / ``27;mod;code ~`` Return key sequence."""
+    parts = body.split(";")
+    try:
+        if code_first:  # code ; mod
+            code = int(parts[0])
+            mod = int(parts[1]) if len(parts) > 1 else 1
+        else:  # 27 ; mod ; code
+            if len(parts) != 3 or parts[0] != "27":
+                return ESC
+            mod = int(parts[1])
+            code = int(parts[2])
+    except (ValueError, IndexError):
+        return ESC
+    if code not in (10, 13):
+        return ESC
+    return SHIFT_ENTER if mod >= 2 else ENTER
 
 
 def _decode_byte(b: int) -> str:
@@ -215,6 +243,11 @@ class _Entry:
         self.analysis: Optional[Analysis] = None
         self.functions: List[RuntimeFunction] = []
         self._rows_cache: Dict[bool, Tuple[str, List[str], List[bool]]] = {}
+        # forwarding-flow caches (lazily populated on expand)
+        self.flow_cache: Dict[int, object] = {}
+        self.flow_lines_cache: Dict[Tuple[int, bool], list] = {}
+        self._begins: Optional[Dict[int, Optional[int]]] = None
+        self._begin_pos: Optional[Dict[int, int]] = None
         try:
             self.size = os.path.getsize(path)
         except OSError:
@@ -240,6 +273,45 @@ class _Entry:
         result = _compose_rows(self.pe, self.functions, use_va)
         self._rows_cache[use_va] = result
         return result
+
+    # -- forwarding-flow expansion -------------------------------------------
+
+    def begins_map(self) -> Dict[int, Optional[int]]:
+        """begin RVA -> .pdata index (stable across re-sorts)."""
+        if self._begins is None:
+            self._begins = {f.begin_address: f.index for f in self.functions}
+        return self._begins
+
+    def begin_pos(self) -> Dict[int, int]:
+        """begin RVA -> current list position (invalidated on sort)."""
+        if self._begin_pos is None:
+            self._begin_pos = {
+                f.begin_address: i for i, f in enumerate(self.functions)
+            }
+        return self._begin_pos
+
+    def flow_trace(self, begin: int):
+        tr = self.flow_cache.get(begin)
+        if tr is None:
+            resolver = self.analysis.import_resolver if self.analysis else None
+            tr = trace_flow(self.pe, begin, self.begins_map(), resolver)
+            self.flow_cache[begin] = tr
+        return tr
+
+    def flow_lines(self, begin: int, use_va: bool) -> list:
+        key = (begin, use_va)
+        out = self.flow_lines_cache.get(key)
+        if out is None:
+            out = render_flow_lines(
+                self.pe, self.flow_trace(begin),
+                use_va=use_va, begins=self.begins_map(),
+            )
+            self.flow_lines_cache[key] = out
+        return out
+
+    def invalidate_positions(self) -> None:
+        """Drop position-derived caches after the function order changes."""
+        self._begin_pos = None
 
 
 def _compose_rows(
@@ -297,6 +369,9 @@ class TuiApp:
         self.sel = 0
         self.top = 0
         self.page = 1
+        # inline forwarding-flow expansion
+        self.expanded: set = set()   # function positions shown expanded
+        self.flow_idx = -1           # sub-row under sel (-1 == the function row)
 
         # text view state
         self.text_lines: List[str] = []
@@ -462,6 +537,8 @@ class TuiApp:
         e.load()
         self.sel = 0
         self.top = 0
+        self.flow_idx = -1
+        self.expanded.clear()
         self.sort_mode = False
         if e.error:
             self._open_text("error", f"Error loading {os.path.basename(e.path)}",
@@ -502,17 +579,20 @@ class TuiApp:
                 lines.append("")
         else:
             self.sel = self._clamp(self.sel, 0, nfun - 1)
-            self.top = self._ensure_visible(self.sel, self.top, nfun, body_h)
+            vrows = self._visual_rows()
+            vi = self._vindex(vrows)
+            self.top = self._ensure_visible(vi, self.top, len(vrows), body_h)
             for i in range(body_h):
                 idx = self.top + i
-                if idx >= nfun:
+                if idx >= len(vrows):
                     lines.append("")
                     continue
-                s = plain_truncate(rowstrs[idx], cols)
-                if idx == self.sel:
+                _, _, text, color, _ = vrows[idx]
+                s = plain_truncate(text, cols)
+                if idx == vi:
                     lines.append(p.reverse(pad(s, cols)))
-                elif meta[idx]:
-                    lines.append(p.red(s))
+                elif color:
+                    lines.append(p.wrap(s, color))
                 else:
                     lines.append(s)
         if self.sort_mode:
@@ -523,8 +603,8 @@ class TuiApp:
         else:
             back = "back" if len(self.entries) > 1 else "quit"
             footer = (
-                f" up/down  PgUp/PgDn  enter inspect  s sort  w warnings  "
-                f"v va/rva  esc {back}  q quit "
+                f" up/down  enter inspect/jump  x expand flow  s sort  "
+                f"w warn  v va/rva  esc {back}  q quit "
             )
         lines.append(self._bar(footer, cols))
         return lines
@@ -549,21 +629,39 @@ class TuiApp:
             return self._handle_sort(key)
         e = self.entry()
         n = len(e.functions)
+        if n == 0:
+            if key == "q":
+                return False
+            if key in (ESC, LEFT):
+                return self._leave_list()
+            if key == "w":
+                self._open_warnings()
+            elif key in ("h", "?"):
+                self._open_help()
+            elif key == "v":
+                self.use_va = not self.use_va
+            return True
+        vrows = self._visual_rows()
+        vi = self._vindex(vrows)
         if key in (UP, "k"):
-            self.sel = self._clamp(self.sel - 1, 0, max(0, n - 1))
+            self._move_cursor(vrows, vi - 1)
         elif key in (DOWN, "j"):
-            self.sel = self._clamp(self.sel + 1, 0, max(0, n - 1))
+            self._move_cursor(vrows, vi + 1)
         elif key == PGUP:
-            self.sel = self._clamp(self.sel - self.page, 0, max(0, n - 1))
+            self._move_cursor(vrows, vi - self.page)
         elif key == PGDN:
-            self.sel = self._clamp(self.sel + self.page, 0, max(0, n - 1))
+            self._move_cursor(vrows, vi + self.page)
         elif key in (HOME, "g"):
-            self.sel = 0
+            self._move_cursor(vrows, 0)
         elif key in (END, "G"):
-            self.sel = max(0, n - 1)
-        elif key == ENTER and n:
-            self._open_detail()
+            self._move_cursor(vrows, len(vrows) - 1)
+        elif key == ENTER:
+            self._activate_row(vrows, vi)
+        elif key in (SHIFT_ENTER, "x"):
+            self._toggle_expand()
         elif key in ("s", TAB):
+            self.expanded.clear()
+            self.flow_idx = -1
             self.sort_mode = True
             if self.sort_applied is not None:
                 self.sort_cursor = self.sort_applied
@@ -576,11 +674,74 @@ class TuiApp:
         elif key == "q":
             return False
         elif key in (ESC, LEFT):
-            if len(self.entries) > 1:
-                self.mode = self.MODE_FILES
-            else:
-                return False
+            return self._leave_list()
         return True
+
+    # -- visual-row model (function rows + inline flow expansions) -----------
+
+    def _visual_rows(self) -> List[Tuple[int, int, str, str, Optional[int]]]:
+        """Flatten functions and any expanded flow into renderable rows.
+
+        Each row is ``(func_pos, flow_idx, text, color, jump_pos)``; ``flow_idx``
+        is ``-1`` for a function row, and ``jump_pos`` is the destination list
+        position when a flow row lands on another function's begin."""
+        e = self.entry()
+        _, rowstrs, meta, _ = e.rows(self.use_va)
+        out: List[Tuple[int, int, str, str, Optional[int]]] = []
+        for p in range(len(rowstrs)):
+            out.append((p, -1, rowstrs[p], "red" if meta[p] else "", None))
+            if p in self.expanded:
+                begin = e.functions[p].begin_address
+                for k, fl in enumerate(e.flow_lines(begin, self.use_va)):
+                    jump_pos = (
+                        e.begin_pos().get(fl.jump_rva)
+                        if fl.jump_rva is not None
+                        else None
+                    )
+                    out.append((p, k, fl.text, fl.color, jump_pos))
+        return out
+
+    def _vindex(self, vrows) -> int:
+        for i, (p, fi, *_rest) in enumerate(vrows):
+            if p == self.sel and fi == self.flow_idx:
+                return i
+        # selection moved onto a now-collapsed row: fall back to its func row.
+        self.flow_idx = -1
+        for i, (p, fi, *_rest) in enumerate(vrows):
+            if p == self.sel and fi == -1:
+                return i
+        return 0
+
+    def _move_cursor(self, vrows, new_i: int) -> None:
+        new_i = self._clamp(new_i, 0, len(vrows) - 1)
+        p, fi = vrows[new_i][0], vrows[new_i][1]
+        self.sel = p
+        self.flow_idx = fi
+
+    def _activate_row(self, vrows, vi: int) -> None:
+        _, fi, _text, _color, jump_pos = vrows[vi]
+        if fi >= 0 and jump_pos is not None:  # jump to the landed function
+            self.sel = jump_pos
+            self.flow_idx = -1
+            return
+        self._open_detail()  # function row or non-jumpable flow row
+
+    def _toggle_expand(self) -> None:
+        e = self.entry()
+        if not e.functions:
+            return
+        p = self.sel
+        if p in self.expanded:
+            self.expanded.discard(p)
+        else:
+            self.expanded.add(p)
+        self.flow_idx = -1  # land back on the function row either way
+
+    def _leave_list(self) -> bool:
+        if len(self.entries) > 1:
+            self.mode = self.MODE_FILES
+            return True
+        return False
 
     def _handle_sort(self, key: str) -> bool:
         ncols = len(FUNC_COLUMNS)
@@ -605,8 +766,10 @@ class TuiApp:
             self._sort_current()
         elif key in (UP, "k"):
             self.sel = self._clamp(self.sel - 1, 0, max(0, len(self.entry().functions) - 1))
+            self.flow_idx = -1
         elif key in (DOWN, "j"):
             self.sel = self._clamp(self.sel + 1, 0, max(0, len(self.entry().functions) - 1))
+            self.flow_idx = -1
         elif key in (ESC, "s", "q"):
             self.sort_mode = False
         return True
@@ -656,6 +819,9 @@ class TuiApp:
         e.functions.sort(key=self._sort_keyfn(self.sort_applied, e.pe),
                          reverse=self.sort_desc)
         e._rows_cache.clear()
+        e.invalidate_positions()  # list order changed; begin->pos is stale
+        self.expanded.clear()
+        self.flow_idx = -1
         # Surface the extremes: a fresh sort jumps to the top of the list.
         self.sel = 0
         self.top = 0
@@ -745,6 +911,7 @@ class TuiApp:
         if not n:
             return
         self.sel = self._clamp(self.sel + delta, 0, n - 1)
+        self.flow_idx = -1
         self._open_detail()
 
     # -- chrome ---------------------------------------------------------------
@@ -768,6 +935,15 @@ _HELP_LINES = [
     "  Home / End (or g / G)   jump to first / last",
     "  Enter                   inspect the selected function in full detail",
     "  Left / Right            (in detail) previous / next function",
+    "",
+    "forwarding flow",
+    "  x  (or Shift+Enter*)    expand/collapse the code-flow trace of a func",
+    "                          -- decodes each block and follows the jmp/",
+    "                          tail-dispatch chain across sections, e.g.",
+    "                          .text:0x1020 -> .grfn10:.. -> .grfn10:..",
+    "  Enter (on a green hop)  jump to the function that hop lands on",
+    "  * Shift+Enter is honored only on terminals that report it; the",
+    "    standard Windows console cannot, so use 'x' there.",
     "  w                       view diagnostics (warnings / errors)",
     "  v                       toggle between RVA and virtual address",
     "  h or ?                  this help",

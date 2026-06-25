@@ -31,6 +31,7 @@ from .handlers import (
     decode_handlers,
 )
 from .pe import DataDirectory, PEFile, Section
+from .flow import FlowHop, FlowInsn, FlowTrace, iced_available, trace_flow
 from .trampolines import StartTrampoline, annotate_trampolines, peel_start
 from .unwind import (
     RuntimeFunction,
@@ -41,7 +42,7 @@ from .unwind import (
     parse_unwind_info,
 )
 
-__version__ = "0.0.5"
+__version__ = "0.0.6"
 
 __all__ = [
     "__version__",
@@ -66,6 +67,11 @@ __all__ = [
     "StartTrampoline",
     "peel_start",
     "annotate_trampolines",
+    "trace_flow",
+    "FlowTrace",
+    "FlowHop",
+    "FlowInsn",
+    "iced_available",
     "Diagnostic",
     "DiagnosticBag",
     "Severity",

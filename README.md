@@ -1,14 +1,17 @@
 # unwindy
 
-A slim, **zero-dependency** CLI **and interactive TUI** for inspecting x64
+A slim CLI **and interactive TUI** for inspecting x64
 (PE64) exception / unwind information in rich detail. It decodes the `.pdata`
 `RUNTIME_FUNCTION` table and every `UNWIND_INFO` / `UNWIND_CODE` (UWOP) record,
 resolves chained unwind info, surfaces language-specific handlers, and loudly
 warns about anything that looks off — while raising on data that violates the
 spec.
 
-Pure Python standard library. No `lief`, no `pefile`, no `rich`. Runs on Linux
-and Windows with any CPython ≥ 3.9.
+The PE/unwind core is pure Python standard library — no `lief`, no `pefile`,
+no `rich`. The interactive **forwarding-flow** view additionally uses
+[`iced-x86`](https://pypi.org/project/iced-x86/) to disassemble basic blocks;
+it is imported lazily, so the core still runs without it. Linux and Windows,
+any CPython ≥ 3.9.
 
 ## Why
 
@@ -59,13 +62,25 @@ it.
 * **Inspect** -- `Enter` opens the full decoded detail (prolog unwind codes,
   handler, and the resolved chain), itself scrollable; `Left`/`Right` step to the
   previous/next function.
+* **Forwarding flow** -- press **`x`** (or `Shift+Enter`*) to expand a function
+  in place and trace where its code actually goes. unwindy disassembles each
+  basic block and follows the primary outgoing edge -- a direct `jmp`, or the
+  `call` target of a `call X; jmp reg` tail-dispatch -- across section
+  boundaries until it reaches another function's begin, an import thunk, an
+  indirect branch, or a `ret`. The chain is shown as
+  `.text:0x1020 -> .grfn10:0x135e0e8 -> .grfn10:0x135d340` above the decoded
+  blocks; any hop that lands on a known `RUNTIME_FUNCTION` begin is highlighted
+  green, and `Enter` on it jumps to that function. (*`Shift+Enter` is honoured
+  only where the terminal reports it; the standard Windows console cannot
+  distinguish it from `Enter`, so use `x` there.)
 
 ```
-  up / down (k / j)     move          Enter       inspect selected function
+  up / down (k / j)     move          Enter       inspect / jump to green hop
   PgUp / PgDn           page          Left/Right  prev/next (in detail)
   Home / End (g / G)    jump          s           sort mode (Tab + Enter)
-  v                     RVA <-> VA    w           diagnostics (warnings/errors)
-  Esc                   back / quit   h or ?      help        q  quit
+  x  (Shift+Enter)      expand flow   w           diagnostics (warnings/errors)
+  v                     RVA <-> VA    h or ?      help        q  quit
+  Esc                   back / quit
 ```
 
 ## Non-interactive usage
@@ -147,6 +162,11 @@ python -m unwindy app.exe --json --only-handlers > handlers.json
   `jmp [rip]` import stub), the `jmp` chain is peeled to the real entry point.
   The `real-start` column / `trampoline` JSON field show the peeled RVA, and any
   **segment transition** (the hop that lands in a different section) is flagged.
+* **Forwarding flow** (TUI, `iced-x86`) — beyond start trampolines, a function
+  whose *real* prolog tail-jumps or tail-dispatches elsewhere (e.g. the packed
+  `.grfn*` thunks that `jmp` into a `call resolver; jmp rax` stub) is traced
+  block by block to its destination. Each block is disassembled and the chain
+  of section-labelled hops is shown; hops landing on a known begin are jumpable.
 * **Section context** — every begin/end/handler address is labelled with its
   containing section (`section:0xADDRESS`), and functions whose body spans two
   sections are flagged (`x-sect` column / `crosses_section` in JSON).

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unwindy"
-version = "0.0.5"
+version = "0.0.6"
 description = "Slim PE64 x64 exception/unwind information viewer (no heavy deps)"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -16,8 +16,9 @@ classifiers = [
     "Topic :: Software Development :: Disassemblers",
     "Operating System :: OS Independent",
 ]
-# Intentionally zero runtime dependencies: pure standard library.
-dependencies = []
+# The PE/unwind core is pure standard library; iced-x86 powers only the
+# interactive forwarding-flow disassembly view (imported lazily).
+dependencies = ["iced-x86>=1.18"]
 
 [project.scripts]
 unwindy = "unwindy.cli:main"

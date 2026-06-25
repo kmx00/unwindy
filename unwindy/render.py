@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Callable, List, Optional, Sequence
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Sequence
 
 from .analyzer import Analysis
 from .errors import Diagnostic, Severity
 from .pe import PEFile
 from .unwind import RuntimeFunction, UnwindInfo, UnwindOp
 from .handlers import HandlerData
+from .flow import FlowTrace, iced_available
 
 
 # --- color ------------------------------------------------------------------
@@ -412,6 +414,114 @@ def render_function_table(
     col_color = [None, None, None, None, None, None, color_ops, color_flags,
                  None, color_xsect, color_handler, color_tramp]
     return format_table(FUNC_COLUMNS, rows, aligns, p, col_color)
+
+
+# --- forwarding flow --------------------------------------------------------
+
+
+@dataclass
+class FlowLine:
+    """One rendered row of a flow expansion.
+
+    ``color`` is a :class:`Painter` method name (or ``""``); ``jump_rva`` is the
+    begin RVA a row navigates to when it lands on another function's entry."""
+
+    text: str
+    color: str = ""
+    jump_rva: Optional[int] = None
+
+
+_STOP_NOTES = {
+    "import": "import thunk",
+    "indirect": "indirect jmp",
+    "conditional": "conditional branch",
+    "ret": "returns",
+    "int": "int / trap",
+    "bad": "undecodable",
+    "cycle": "cycle",
+    "limit": "hop limit reached",
+    "unmapped": "unmapped target",
+    "fallthrough": "falls through into body",
+}
+
+
+def _flow_note(trace: FlowTrace) -> str:
+    dest = trace.destination
+    if trace.stop == "known-begin" and dest is not None:
+        idx = "?" if dest.func_index is None else f"#{dest.func_index}"
+        return f"forwards to {idx}"
+    if trace.stop == "import":
+        if trace.import_name:
+            return f"import {trace.import_name}"
+        if trace.import_slot is not None:
+            return f"import via IAT slot {trace.import_slot:#x}"
+        return "import thunk"
+    return _STOP_NOTES.get(trace.stop, trace.stop)
+
+
+def _fmt_bytes(raw: bytes, max_bytes: int = 12) -> str:
+    if len(raw) <= max_bytes:
+        return raw.hex(" ")
+    return raw[:max_bytes].hex(" ") + " +"
+
+
+def render_flow_lines(
+    pe: PEFile,
+    trace: FlowTrace,
+    *,
+    use_va: bool = False,
+    begins: Optional[Dict[int, Optional[int]]] = None,
+    max_insns: int = 8,
+    indent: str = "    ",
+) -> List[FlowLine]:
+    """Expand a :class:`FlowTrace` into rows for the inline TUI view.
+
+    The first row is the arrow-chain summary; each hop then contributes a
+    section-labelled header (jumpable, in green, when it lands on another
+    function's begin) followed by its decoded instructions."""
+    if trace.stop == "no-iced" or not iced_available():
+        return [FlowLine(indent + "flow view needs iced-x86 "
+                         "(pip install iced-x86)", "yellow")]
+    if not trace.hops:
+        return [FlowLine(indent + "flow: <no decodable code at entry>", "yellow")]
+
+    begins = begins or {}
+    lines: List[FlowLine] = []
+
+    arrow = " -> ".join(addr_label(pe, h.start, use_va=use_va) for h in trace.hops)
+    summary = f"flow: {arrow}   ({_flow_note(trace)})"
+    lines.append(FlowLine(indent + summary,
+                          "cyan" if trace.crosses_section else "gray"))
+
+    for hi, hop in enumerate(trace.hops):
+        label = addr_label(pe, hop.start, use_va=use_va)
+        conn = "@ " if hi == 0 else "-> "
+        jump_rva = None
+        color = ""
+        head = f"{indent}{conn}{label}"
+        if hop.func_index is not None:
+            head += f"  [#{hop.func_index}]"
+            if hi > 0:  # a destination we can jump to
+                head += "  <enter: jump>"
+                jump_rva = hop.start
+                color = "green"
+        lines.append(FlowLine(head, color, jump_rva))
+
+        shown = hop.insns[:max_insns]
+        for fi in shown:
+            tgt = ""
+            if fi.import_name:
+                tgt = f"   ; {fi.import_name}"
+            elif fi.target is not None and fi.target in begins:
+                ix = begins[fi.target]
+                tgt = f"   ; -> #{ix}" if ix is not None else "   ; -> begin"
+            row = f"{indent}    {fi.rva:#x}: {_fmt_bytes(fi.raw):<26} {fi.text}{tgt}"
+            lines.append(FlowLine(row, "gray"))
+        extra = len(hop.insns) - len(shown)
+        if extra > 0:
+            lines.append(FlowLine(f"{indent}    ... ({extra} more)", "gray"))
+
+    return lines
 
 
 # --- per-function detail ----------------------------------------------------

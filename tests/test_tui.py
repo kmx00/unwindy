@@ -17,6 +17,7 @@ from unwindy.tui import (
     PGUP,
     TAB,
     UP,
+    SHIFT_ENTER,
     TuiApp,
     _decode_byte,
     _decode_posix_seq,
@@ -271,6 +272,88 @@ class KeyDecodeTests(unittest.TestCase):
         self.assertEqual(_decode_byte(27), ESC)
         self.assertEqual(_decode_byte(3), "q")  # Ctrl-C -> quit
         self.assertEqual(_decode_byte(ord("v")), "v")
+
+    def test_posix_shift_enter_csi_u(self):
+        self.assertEqual(_decode_posix_seq(b"[13;2u"), SHIFT_ENTER)
+        self.assertEqual(_decode_posix_seq(b"[13;1u"), ENTER)
+        self.assertEqual(_decode_posix_seq(b"[13u"), ENTER)
+
+    def test_posix_shift_enter_modify_other_keys(self):
+        self.assertEqual(_decode_posix_seq(b"[27;2;13~"), SHIFT_ENTER)
+        self.assertEqual(_decode_posix_seq(b"[27;1;13~"), ENTER)
+        # arrows and tilde nav keys still decode after the new branch
+        self.assertEqual(_decode_posix_seq(b"[A"), UP)
+        self.assertEqual(_decode_posix_seq(b"[5~"), PGUP)
+
+
+def _iced_ok():
+    from unwindy.flow import iced_available
+    return iced_available()
+
+
+@unittest.skipUnless(SAMPLE2.exists() and _iced_ok(), "needs sample + iced-x86")
+class FlowExpandTests(unittest.TestCase):
+    """Inline forwarding-flow expansion over the packed `.grfn*` sample."""
+
+    def _open(self):
+        a = _app(files=[str(SAMPLE2)])
+        a.render_frame(140, 40)
+        return a
+
+    def test_x_expands_and_inserts_flow_rows(self):
+        a = self._open()
+        self.assertEqual(a.entry().functions[0].begin_address, 0x1020)
+        base = len(a._visual_rows())
+        a.handle_key("x")
+        self.assertIn(0, a.expanded)
+        vrows = a._visual_rows()
+        self.assertGreater(len(vrows), base)
+        # a summary row and a jumpable destination row appear under func 0
+        own = [r for r in vrows if r[0] == 0 and r[1] >= 0]
+        self.assertTrue(any(r[2].lstrip().startswith("flow:") for r in own))
+        self.assertTrue(any(r[4] is not None for r in own))
+
+    def test_shift_enter_also_expands(self):
+        a = self._open()
+        a.handle_key(SHIFT_ENTER)
+        self.assertIn(0, a.expanded)
+        a.handle_key(SHIFT_ENTER)  # toggles back
+        self.assertNotIn(0, a.expanded)
+
+    def test_enter_on_jumpable_row_navigates_to_begin(self):
+        a = self._open()
+        a.handle_key("x")
+        # walk down onto the green jumpable hop
+        for _ in range(40):
+            vrows = a._visual_rows()
+            vi = a._vindex(vrows)
+            if vrows[vi][1] >= 0 and vrows[vi][4] is not None:
+                break
+            a.handle_key("DOWN")
+        vrows = a._visual_rows()
+        target = vrows[a._vindex(vrows)][4]
+        self.assertIsNotNone(target)
+        a.handle_key("ENTER")
+        self.assertEqual(a.sel, target)
+        self.assertEqual(a.flow_idx, -1)
+        self.assertEqual(a.entry().functions[a.sel].begin_address, 0x135D340)
+
+    def test_collapse_removes_flow_rows(self):
+        a = self._open()
+        a.handle_key("x")
+        self.assertIn(0, a.expanded)
+        a.sel, a.flow_idx = 0, -1
+        a.handle_key("x")
+        self.assertNotIn(0, a.expanded)
+        # only function rows remain (flow_idx == -1 for every row)
+        self.assertTrue(all(r[1] == -1 for r in a._visual_rows()))
+
+    def test_sort_clears_expansion(self):
+        a = self._open()
+        a.handle_key("x")
+        self.assertTrue(a.expanded)
+        a.handle_key("s")  # entering sort mode clears inline expansions
+        self.assertFalse(a.expanded)
 
 
 if __name__ == "__main__":

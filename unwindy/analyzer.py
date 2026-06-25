@@ -11,7 +11,7 @@ from typing import List, Optional
 
 from .errors import DiagnosticBag, UnwindFormatError
 from .pe import DataDirectory, PEFile
-from .handlers import decode_handlers
+from .handlers import decode_handlers, ImportResolver
 from .trampolines import annotate_trampolines
 from .unwind import RuntimeFunction, UnwindInfo, parse_unwind_info
 
@@ -25,6 +25,7 @@ class Analysis:
     functions: List[RuntimeFunction] = field(default_factory=list)
     diagnostics: DiagnosticBag = field(default_factory=DiagnosticBag)
     strict: bool = True
+    import_resolver: Optional[ImportResolver] = None
 
     # -- aggregate statistics -------------------------------------------------
 
@@ -202,6 +203,7 @@ def analyze(pe: PEFile, *, strict: bool = True) -> Analysis:
     _check_handlers_mapped(pe, analysis.functions, bag)
     resolver = decode_handlers(pe, analysis.functions, bag)
     annotate_trampolines(pe, analysis.functions, resolver)
+    analysis.import_resolver = resolver
     return analysis
 
 

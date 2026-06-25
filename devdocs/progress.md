@@ -144,9 +144,45 @@ Peel function-start trampolines to the real entry point (`unwindy/trampolines.py
       (`b325...` has exactly one `jmp [rip]` import stub at func #901 -> IAT slot
       `0x70020`; `602314...` has none).
 
+## v0.0.6 - DONE
+
+Inline forwarding-flow tracing: follow a function's code through decoded basic
+blocks, across sections, to where it really ends up (`unwindy/flow.py`).
+
+### Tracer
+- [x] `trace_flow` decodes each basic block with iced-x86 (the one decoding
+      dep, imported lazily) and follows the block's primary outgoing edge: a
+      direct `jmp`, or -- for the `call X; jmp reg` tail-dispatch -- the `call`
+      target `X`. `call` does not end a block; only `jmp`/`jcc`/`ret`/`int`/
+      invalid do.
+- [x] Stops at the first real destination: a known `RUNTIME_FUNCTION` begin
+      (jumpable), a `jmp [rip]` import thunk (named via `ImportResolver`), an
+      indirect branch, a `ret`, a cycle, or the hop limit. Records each hop's
+      section, instructions, edge and any cross-section transition.
+- [x] `analyze()` now stores its `ImportResolver` on `Analysis.import_resolver`.
+
+### TUI
+- [x] `x` (and `Shift+Enter` where the terminal reports it via CSI-u /
+      modifyOtherKeys) expands a function in place; the list became a
+      visual-row model so flow rows insert beneath their function. The arrow
+      chain `.text:0x1020 -> .grfn10:0x135e0e8 -> .grfn10:0x135d340` sits above
+      the decoded blocks; a green hop that lands on a known begin is jumpable
+      with `Enter`. Expansions clear on sort / file switch.
+
+### Verification
+- [x] 138 unit tests, all passing (+16): tracer chain / dispatch / import /
+      normal-function / no-iced-degradation, render jump markers, and TUI
+      expand / collapse / jump / shift-enter decode.
+- [x] Reproduces the motivating case on `602314...`: func #0 (`.text:0x1020`)
+      forwards through `.grfn10` to func #2830 (`.grfn10:0x135d340`); the
+      `jmp [rip]` import stub on `b325...` stops at IAT slot `0x70020`.
+
 ## Backlog / extra credit
 - [x] Decode language-specific handler payloads (`__C_specific_handler` scope
       tables, `__GSHandlerCheck`, MSVC C++ `FuncInfo`).  *(v0.0.4)*
+- [ ] **Audit + refactor pass** (TODO): codebase has grown to ~4.7k LoC across
+      12 modules; review for correctness, dead code, and cohesion. `tui.py`
+      (~1k LoC) and the flow/visual-row plumbing are the prime refactor targets.
 - [ ] In-TUI text search / filtering.
 - [ ] Full v3 unwind support once the spec is published (currently v3 parses
       best-effort using the v2 layout with a warning).
