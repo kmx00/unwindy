@@ -15,10 +15,11 @@ import os
 import sys
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from .analyzer import Analysis, analyze
-from .errors import UnwindyError
-from .pe import PEFile
-from .render import (
+from ..analyzer import Analysis, analyze
+from ..errors import UnwindyError
+from ..flow import trace_flow
+from ..pe import PEFile
+from ..render import (
     FUNC_ALIGNS,
     FUNC_COLUMN_TABLE,
     FUNC_COLUMNS,
@@ -30,203 +31,25 @@ from .render import (
     render_flow_lines,
     render_function_detail,
 )
-from .flow import trace_flow
-from .unwind import RuntimeFunction
-
-# Key tokens returned by the readers.
-UP, DOWN, LEFT, RIGHT = "UP", "DOWN", "LEFT", "RIGHT"
-PGUP, PGDN, HOME, END = "PGUP", "PGDN", "HOME", "END"
-ENTER, ESC, BACKSPACE = "ENTER", "ESC", "BACKSPACE"
-TAB, BACKTAB = "TAB", "BACKTAB"
-SHIFT_ENTER = "SHIFT_ENTER"
-
-
-# --- ANSI-aware string helpers ----------------------------------------------
-
-
-def plain_truncate(s: str, width: int) -> str:
-    if width <= 0:
-        return ""
-    return s if len(s) <= width else s[:width]
-
-
-def pad(s: str, width: int) -> str:
-    return s + " " * (width - len(s)) if len(s) < width else s
-
-
-def ansi_truncate(s: str, width: int) -> str:
-    """Truncate to ``width`` *visible* columns, preserving ANSI escapes."""
-    if width <= 0:
-        return ""
-    out: List[str] = []
-    vis = 0
-    i = 0
-    n = len(s)
-    saw_escape = False
-    while i < n:
-        ch = s[i]
-        if ch == "\x1b":
-            j = i + 1
-            if j < n and s[j] == "[":
-                j += 1
-                while j < n and not ("@" <= s[j] <= "~"):
-                    j += 1
-                if j < n:
-                    j += 1
-            else:
-                j = min(n, i + 2)
-            out.append(s[i:j])
-            saw_escape = True
-            i = j
-            continue
-        if vis >= width:
-            break
-        out.append(ch)
-        vis += 1
-        i += 1
-    res = "".join(out)
-    if saw_escape and not res.endswith("\x1b[0m"):
-        res += "\x1b[0m"
-    return res
-
-
-# --- key readers ------------------------------------------------------------
-
-
-class _PosixKeyReader:
-    def __init__(self) -> None:
-        import termios  # noqa: F401  (import-time availability check)
-
-        self._fd = sys.stdin.fileno()
-        self._old = None
-
-    def __enter__(self) -> "_PosixKeyReader":
-        import termios
-        import tty
-
-        self._old = termios.tcgetattr(self._fd)
-        tty.setraw(self._fd)
-        return self
-
-    def __exit__(self, *exc) -> None:
-        import termios
-
-        if self._old is not None:
-            termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old)
-
-    def read_key(self) -> str:
-        data = os.read(self._fd, 1)
-        if not data:
-            return ESC
-        ch = data
-        if ch == b"\x1b":
-            import select
-
-            r, _, _ = select.select([self._fd], [], [], 0.02)
-            if not r:
-                return ESC
-            seq = os.read(self._fd, 10)
-            return _decode_posix_seq(seq)
-        return _decode_byte(ch[0])
-
-
-def _decode_posix_seq(seq: bytes) -> str:
-    text = seq.decode("latin-1", "replace")
-    if text[:1] == "[" or text[:1] == "O":
-        body = text[1:]
-        simple = {
-            "A": UP, "B": DOWN, "C": RIGHT, "D": LEFT,
-            "H": HOME, "F": END, "Z": BACKTAB,
-        }
-        if body[:1] in simple:
-            return simple[body[:1]]
-        # Enter with modifiers: kitty/fixterms CSI-u (\x1b[13;2u) and xterm
-        # modifyOtherKeys (\x1b[27;2;13~).  Any modifier on Return -> SHIFT_ENTER.
-        if body[-1:] == "u":
-            return _decode_modified_enter(body[:-1], code_first=True)
-        if body[-1:] == "~" and ";" in body:
-            return _decode_modified_enter(body[:-1], code_first=False)
-        # \x1b[<num>~
-        num = ""
-        for c in body:
-            if c.isdigit():
-                num += c
-            else:
-                break
-        mapping = {"1": HOME, "7": HOME, "4": END, "8": END, "5": PGUP, "6": PGDN}
-        return mapping.get(num, ESC)
-    return ESC
-
-
-def _decode_modified_enter(body: str, *, code_first: bool) -> str:
-    """Decode a CSI ``code;mod u`` / ``27;mod;code ~`` Return key sequence."""
-    parts = body.split(";")
-    try:
-        if code_first:  # code ; mod
-            code = int(parts[0])
-            mod = int(parts[1]) if len(parts) > 1 else 1
-        else:  # 27 ; mod ; code
-            if len(parts) != 3 or parts[0] != "27":
-                return ESC
-            mod = int(parts[1])
-            code = int(parts[2])
-    except (ValueError, IndexError):
-        return ESC
-    if code not in (10, 13):
-        return ESC
-    return SHIFT_ENTER if mod >= 2 else ENTER
-
-
-def _decode_byte(b: int) -> str:
-    if b in (13, 10):
-        return ENTER
-    if b == 9:
-        return TAB
-    if b in (127, 8):
-        return BACKSPACE
-    if b == 3:  # Ctrl-C
-        return "q"
-    if b == 27:
-        return ESC
-    return chr(b)
-
-
-class _WindowsKeyReader:
-    def __enter__(self) -> "_WindowsKeyReader":
-        return self
-
-    def __exit__(self, *exc) -> None:
-        pass
-
-    def read_key(self) -> str:
-        import msvcrt
-
-        ch = msvcrt.getwch()
-        if ch in ("\x00", "\xe0"):  # special key prefix
-            code = msvcrt.getwch()
-            mapping = {
-                "H": UP, "P": DOWN, "K": LEFT, "M": RIGHT,
-                "I": PGUP, "Q": PGDN, "G": HOME, "O": END,
-                "\x0f": BACKTAB,
-            }
-            return mapping.get(code, ESC)
-        if ch in ("\r", "\n"):
-            return ENTER
-        if ch == "\t":
-            return TAB
-        if ch == "\x08":
-            return BACKSPACE
-        if ch == "\x03":
-            return "q"
-        if ch == "\x1b":
-            return ESC
-        return ch
-
-
-def make_key_reader():
-    if os.name == "nt":
-        return _WindowsKeyReader()
-    return _PosixKeyReader()
+from ..unwind import RuntimeFunction
+from .keys import (
+    BACKSPACE,
+    BACKTAB,
+    DOWN,
+    END,
+    ENTER,
+    ESC,
+    HOME,
+    LEFT,
+    PGDN,
+    PGUP,
+    RIGHT,
+    SHIFT_ENTER,
+    TAB,
+    UP,
+    make_key_reader,
+)
+from .text import ansi_truncate, pad, plain_truncate
 
 
 # --- file entry / analysis cache --------------------------------------------

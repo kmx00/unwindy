@@ -27,7 +27,7 @@ unwindy = "unwindy.cli:main"
 Homepage = "https://github.com/unwindy/unwindy"
 
 [tool.setuptools]
-packages = ["unwindy"]
+packages = ["unwindy", "unwindy.tui"]
 
 [tool.setuptools.package-data]
 unwindy = ["py.typed"]
