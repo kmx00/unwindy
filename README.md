@@ -1,18 +1,16 @@
 # unwindy
 
-A slim CLI **and interactive TUI** for inspecting x64
-(PE64) exception / unwind information in rich detail. It decodes the `.pdata`
-`RUNTIME_FUNCTION` table and every `UNWIND_INFO` / `UNWIND_CODE` (UWOP) record,
-resolves chained unwind info, surfaces language-specific handlers, and loudly
-warns about anything that looks off — while raising on data that violates the
-spec.
+A slim CLI **and interactive TUI** for inspecting x64 (PE64) exception/unwind
+information. It decodes the `.pdata` `RUNTIME_FUNCTION` table and every
+`UNWIND_INFO` / `UNWIND_CODE` (UWOP) record, resolves chained unwind info,
+surfaces language-specific handlers, and loudly warns about anything off — while
+raising on data that violates the spec.
 
-**Zero hard dependencies** — the PE/unwind core is pure Python standard library
-(no `lief`, `pefile`, or `rich`). The interactive **forwarding-flow** view uses
-[`iced-x86`](https://pypi.org/project/iced-x86/) to disassemble basic blocks; it
-is an optional extra (`pip install unwindy[flow]`), imported lazily, so the base
-install stays dependency-free and everything else runs without it. Linux and
-Windows, any CPython ≥ 3.9.
+**Zero hard dependencies** — the PE/unwind core is pure Python standard library.
+The interactive forwarding-flow view adds
+[`iced-x86`](https://pypi.org/project/iced-x86/) for disassembly as an optional
+extra (`pip install unwindy[flow]`), imported lazily. Linux, Windows, macOS —
+any CPython ≥ 3.9.
 
 ## Why
 
@@ -65,16 +63,11 @@ it.
   handler, and the resolved chain), itself scrollable; `Left`/`Right` step to the
   previous/next function.
 * **Forwarding flow** -- press **`x`** (or `Shift+Enter`*) to expand a function
-  in place and trace where its code actually goes. unwindy disassembles each
-  basic block and follows the primary outgoing edge -- a direct `jmp`, or the
-  `call` target of a `call X; jmp reg` tail-dispatch -- across section
-  boundaries until it reaches another function's begin, an import thunk, an
-  indirect branch, or a `ret`. The chain is shown as
-  `.text:0x1020 -> .grfn10:0x135e0e8 -> .grfn10:0x135d340` above the decoded
-  blocks; any hop that lands on a known `RUNTIME_FUNCTION` begin is highlighted
-  green, and `Enter` on it jumps to that function. (*`Shift+Enter` is honoured
-  only where the terminal reports it; the standard Windows console cannot
-  distinguish it from `Enter`, so use `x` there.)
+  in place and follow where its code actually goes: each basic block is
+  disassembled and the `jmp` / tail-dispatch chain is traced across sections to
+  its destination. Hops that land on a known function are shown in green; `Enter`
+  jumps to them. (*Use `x` on the Windows console, which can't report
+  `Shift+Enter`.)
 
 ```
   up / down (k / j)     move          Enter       inspect / jump to green hop
@@ -164,13 +157,10 @@ python -m unwindy app.exe --json --only-handlers > handlers.json
   `jmp [rip]` import stub), the `jmp` chain is peeled to the real entry point.
   The `real-start` column / `trampoline` JSON field show the peeled RVA, and any
   **segment transition** (the hop that lands in a different section) is flagged.
-* **Forwarding flow** (TUI, `iced-x86`) — beyond start trampolines, a function
-  whose *real* prolog tail-jumps or tail-dispatches elsewhere (e.g. the packed
-  `.grfn*` thunks that `jmp` into a `call resolver; jmp rax` stub) is traced
-  block by block to its destination. Each block is disassembled and the chain
-  of section-labelled hops is shown; hops landing on a known begin are jumpable.
-  This view is interactive-only: it is not part of `--json` (which stays
-  deterministic and pure-stdlib).
+* **Forwarding flow** (TUI, `iced-x86`) — when a function's *real* prolog
+  tail-jumps or tail-dispatches into another stub, the `jmp`/`call` chain is
+  disassembled and traced block by block to its destination, across sections.
+  Interactive-only; not part of `--json`.
 * **Section context** — every begin/end/handler address is labelled with its
   containing section (`section:0xADDRESS`), and functions whose body spans two
   sections are flagged (`x-sect` column / `crosses_section` in JSON).
@@ -218,12 +208,9 @@ pip install ".[flow]"                                    # run the flow tests to
 CI (GitHub Actions) runs the suite on Linux and Windows, builds an installable
 wheel, and produces standalone PyInstaller binaries for both platforms.
 
-Tests are pure `unittest` (no third-party runner) and cover both bundled
-real-world samples and synthetic images built in `tests/_pebuilder.py` that
-exercise every UWOP, chaining, handler identification and payload decoding
-(scope tables, GS data, C++ FuncInfo, FH4), start-trampoline peeling, each
-malformation path, the address/section labelling, and the interactive TUI's
-logic (driven without a real terminal).
+Tests are pure `unittest` (no third-party runner), exercising the real samples
+plus synthetic images (`tests/_pebuilder.py`) that cover every UWOP, the handler
+payloads, trampolines, malformation paths, and the TUI logic.
 
 ## References
 

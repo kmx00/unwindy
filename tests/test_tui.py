@@ -293,7 +293,7 @@ def _iced_ok():
 
 @unittest.skipUnless(SAMPLE2.exists() and _iced_ok(), "needs sample + iced-x86")
 class FlowExpandTests(unittest.TestCase):
-    """Inline forwarding-flow expansion over the packed `.grfn*` sample."""
+    """Inline forwarding-flow expansion over the large sample."""
 
     def _open(self):
         a = _app(files=[str(SAMPLE2)])

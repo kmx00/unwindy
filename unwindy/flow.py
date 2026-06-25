@@ -2,15 +2,15 @@
 
 Many compiler/linker artifacts begin a ``RUNTIME_FUNCTION`` at a short block
 that, after a tiny prolog, jumps or tail-dispatches into another section
-(incremental-link thunks, guard/ICF stubs, the packed ``.grfn*`` forwarders in
-some images).  Such a function is *not* a start trampoline -- its first
+(incremental-link thunks, guard/ICF stubs, and similar out-of-line forwarder
+stubs).  Such a function is *not* a start trampoline -- its first
 instruction is real code, not a lone ``jmp`` -- so :mod:`unwindy.trampolines`
 never peels it.
 
 ``trace_flow`` decodes each basic block, follows the block's *primary* outgoing
 edge, and stops at the first real destination::
 
-    .text:0x1020  ->  .grfn10:0x135e0e8  ->  .grfn10:0x135d340
+    .text:0x1020  ->  .stub:0x4e10  ->  .stub:0x4d30
 
 The primary edge is a direct ``jmp`` target, or -- for the ``call X; jmp reg``
 tail-dispatch pattern -- the ``call`` target ``X`` (where execution actually

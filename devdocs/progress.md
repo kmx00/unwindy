@@ -71,7 +71,7 @@ Interactive terminal UI + section-aware addressing + multi-file support.
 - [x] 84 unit tests, all passing (added TUI logic/navigation/run-loop, key
       decoders, address/section labelling, multi-file picker).
 - [x] Second sample `602314161f55e2ca2affab8c516437148c079dd8.bin` (19.8 MB,
-      2861 functions, packed `.grfn*` sections): parses in ~0.6 s and the
+      2861 functions, packed forwarder sections): parses in ~0.6 s and the
       relocated exception directory is loudly warned (`pdata.section`).
 
 ## v0.0.3 - DONE
@@ -165,7 +165,7 @@ blocks, across sections, to where it really ends up (`unwindy/flow.py`).
 - [x] `x` (and `Shift+Enter` where the terminal reports it via CSI-u /
       modifyOtherKeys) expands a function in place; the list became a
       visual-row model so flow rows insert beneath their function. The arrow
-      chain `.text:0x1020 -> .grfn10:0x135e0e8 -> .grfn10:0x135d340` sits above
+      chain (entry -> forwarder -> resolver, across sections) sits above
       the decoded blocks; a green hop that lands on a known begin is jumpable
       with `Enter`. Expansions clear on sort / file switch.
 
@@ -174,7 +174,7 @@ blocks, across sections, to where it really ends up (`unwindy/flow.py`).
       normal-function / no-iced-degradation, render jump markers, and TUI
       expand / collapse / jump / shift-enter decode.
 - [x] Reproduces the motivating case on `602314...`: func #0 (`.text:0x1020`)
-      forwards through `.grfn10` to func #2830 (`.grfn10:0x135d340`); the
+      forwards through another section to func #2830; the
       `jmp [rip]` import stub on `b325...` stops at IAT slot `0x70020`.
 
 ## Backlog / extra credit

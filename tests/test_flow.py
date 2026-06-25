@@ -24,15 +24,15 @@ def _load(path):
 
 @unittest.skipUnless(iced_available(), "iced-x86 not installed")
 class DispatchTraceTests(unittest.TestCase):
-    """The packed `.grfn*` sample forwards .text stubs into another section."""
+    """The large sample forwards .text stubs into another section."""
 
     @classmethod
     def setUpClass(cls):
         cls.pe, cls.an, cls.begins = _load(SAMPLE_DISPATCH)
 
     def test_chain_follows_tail_dispatch_across_sections(self):
-        # func #0 begins at .text:0x1020 with a real prolog, then jmp into
-        # .grfn10, which `call`s a resolver and `jmp rax`.
+        # func #0 begins at .text:0x1020 with a real prolog, then jmps into
+        # the forwarding section, which `call`s a resolver and `jmp rax`.
         self.assertEqual(self.an.functions[0].begin_address, 0x1020)
         tr = trace_flow(self.pe, 0x1020, self.begins)
         self.assertEqual(tr.chain, [0x1020, 0x135E0E8, 0x135D340])
