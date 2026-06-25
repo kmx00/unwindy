@@ -64,6 +64,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(doc["stats"]["function_count"], 919)
         self.assertEqual(len(doc["functions"]), 3)
         self.assertEqual(doc["exception_directory"]["count"], 919)
+        # the file field is a bare basename -- never an absolute/leaky path
+        self.assertEqual(doc["file"], os.path.basename(str(SAMPLE)))
+        self.assertNotIn("/", doc["file"])
+        self.assertNotIn("\\", doc["file"])
         # every shown function carries decoded unwind info
         for f in doc["functions"]:
             self.assertIn("unwind_info", f)

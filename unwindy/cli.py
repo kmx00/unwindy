@@ -190,7 +190,7 @@ def build_json(analysis: Analysis, functions: Sequence[RuntimeFunction]) -> dict
     pe = analysis.pe
     ed = analysis.exception_dir
     return {
-        "file": pe.source,
+        "file": os.path.basename(pe.source) if pe.source else None,
         "machine": "AMD64",
         "is_dll": pe.is_dll,
         "image_base": pe.image_base,
