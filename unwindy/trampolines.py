@@ -16,23 +16,15 @@ and is never treated as a trampoline.
 
 from __future__ import annotations
 
-import struct
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
+from .branch import follow_jump
 from .handlers import ImportResolver
 from .pe import PEFile
 from .unwind import RuntimeFunction
 
 MAX_TRAMPOLINE_HOPS = 16
-
-
-def _i8(b: bytes) -> int:
-    return struct.unpack("<b", b)[0]
-
-
-def _i32(b: bytes) -> int:
-    return struct.unpack("<i", b)[0]
 
 
 @dataclass
@@ -72,22 +64,6 @@ class StartTrampoline:
         }
 
 
-def _jmp_target(pe: PEFile, rva: int) -> Tuple[Optional[str], Optional[int]]:
-    """Classify the instruction at ``rva`` as a followable jump.
-
-    Returns ``('local', target_rva)`` for ``jmp rel8/rel32``, ``('import',
-    iat_slot_rva)`` for ``jmp qword [rip+disp]``, or ``(None, None)`` otherwise.
-    """
-    b = pe.read_clamped(rva, 6)
-    if len(b) >= 5 and b[0] == 0xE9:  # jmp rel32
-        return "local", rva + 5 + _i32(b[1:5])
-    if len(b) >= 2 and b[0] == 0xEB:  # jmp rel8
-        return "local", rva + 2 + _i8(b[1:2])
-    if len(b) >= 6 and b[0] == 0xFF and b[1] == 0x25:  # jmp qword [rip+disp]
-        return "import", rva + 6 + _i32(b[2:6])
-    return None, None
-
-
 def peel_start(
     pe: PEFile,
     func: RuntimeFunction,
@@ -96,11 +72,11 @@ def peel_start(
 ) -> Optional[StartTrampoline]:
     """Return the trampoline for ``func`` if its start forwards elsewhere."""
     begin = func.begin_address
-    kind0, target0 = _jmp_target(pe, begin)
+    kind0, target0 = follow_jump(pe, begin)
     if kind0 is None:
         return None
     # A jump that stays inside the function is ordinary control flow.
-    if kind0 == "local" and func.begin_address <= target0 < func.end_address:
+    if kind0 == "rel" and func.begin_address <= target0 < func.end_address:
         return None
 
     seg0 = pe.section_name(begin)
@@ -120,7 +96,7 @@ def peel_start(
     transition: Optional[int] = None
     cur = begin
     for _ in range(MAX_TRAMPOLINE_HOPS):
-        kind, target = _jmp_target(pe, cur)
+        kind, target = follow_jump(pe, cur)
         if kind == "import":  # chain ends at an import stub
             return StartTrampoline(
                 begin=begin,
@@ -132,7 +108,7 @@ def peel_start(
                 crosses_segment=transition is not None,
                 transition_rva=transition,
             )
-        if kind != "local":
+        if kind != "rel":
             break
         if target in seen or pe.section_for_rva(target) is None:
             break

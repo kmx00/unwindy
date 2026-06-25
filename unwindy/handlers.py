@@ -28,6 +28,7 @@ import struct
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+from .branch import direct_call_or_jump, follow_jump
 from .errors import DiagnosticBag
 from .pe import PEFile, PEFormatError
 from .unwind import RuntimeFunction, UnwindInfo
@@ -339,19 +340,16 @@ class ImportResolver:
 
 
 def _import_thunk_target(pe: PEFile, rva: int, resolver: ImportResolver):
-    """If ``rva`` is a ``jmp/call qword [rip+disp]`` import thunk, return its
-    ``(dll, name)``; otherwise ``None``."""
-    b = pe.read_clamped(rva, 6)
-    if len(b) >= 6 and b[0] == 0xFF and b[1] == 0x25:
-        slot = rva + 6 + _i32(b[2:6])
-        return resolver.name_at_slot(slot)
-    return None
+    """If ``rva`` is a ``jmp [rip]`` import thunk, return its ``(dll, name)``;
+    otherwise ``None``."""
+    kind, slot = follow_jump(pe, rva)
+    return resolver.name_at_slot(slot) if kind == "import" else None
 
 
 def resolve_routine(
     pe: PEFile, handler_rva: int, resolver: ImportResolver, *, extent_of=None, max_hops: int = 6
 ) -> Tuple[int, Optional[str], Optional[str], Optional[str]]:
-    """Follow ``jmp rel32`` / ``jmp [rip]`` thunks from ``handler_rva``.
+    """Follow ``jmp`` / ``jmp [rip]`` thunks from ``handler_rva``.
 
     Returns ``(routine_rva, name, dll, wraps)`` where ``name``/``dll`` come from
     the import table when the routine is an imported CRT handler, and ``wraps``
@@ -360,15 +358,14 @@ def resolve_routine(
     """
     cur = handler_rva
     for _ in range(max_hops):
-        b = pe.read_clamped(cur, 6)
-        if len(b) >= 6 and b[0] == 0xFF and b[1] == 0x25:  # jmp qword [rip+disp]
-            slot = cur + 6 + _i32(b[2:6])
-            named = resolver.name_at_slot(slot)
+        kind, val = follow_jump(pe, cur)
+        if kind == "import":  # jmp qword [rip+disp]
+            named = resolver.name_at_slot(val)
             if named:
                 return cur, named[1], named[0], None
             return cur, None, None, None
-        if len(b) >= 5 and b[0] == 0xE9:  # jmp rel32
-            cur = cur + 5 + _i32(b[1:5])
+        if kind == "rel":  # jmp rel8/rel32 -> keep following
+            cur = val
             continue
         break
     return cur, None, None, _scan_wrapper(pe, cur, resolver, extent_of)
@@ -388,21 +385,18 @@ def _scan_wrapper(
     if ext is None:
         return None
     window = min(ext[1] - rva, 0x2000)
-    body = pe.read_clamped(rva, window)
-    n = len(body)
+    n = len(pe.read_clamped(rva, window))
     i = 0
     while i + 6 <= n:
-        op = body[i]
-        if op in (0xE8, 0xE9):  # call/jmp rel32
-            target = rva + i + 5 + _i32(body[i + 1 : i + 5])
-            named = _import_thunk_target(pe, target, resolver)
-            if named and named[1] in RECOGNIZED_LANG_HANDLERS:
-                return named[1]
-        elif op == 0xFF and body[i + 1] == 0x25:  # call/jmp qword [rip+disp]
-            slot = rva + i + 6 + _i32(body[i + 2 : i + 6])
-            named = resolver.name_at_slot(slot)
-            if named and named[1] in RECOGNIZED_LANG_HANDLERS:
-                return named[1]
+        kind, val = direct_call_or_jump(pe, rva + i)
+        if kind == "rel":  # call/jmp rel32 landing on an import thunk
+            named = _import_thunk_target(pe, val, resolver)
+        elif kind == "import":  # direct jmp [rip] import
+            named = resolver.name_at_slot(val)
+        else:
+            named = None
+        if named and named[1] in RECOGNIZED_LANG_HANDLERS:
+            return named[1]
         i += 1
     return None
 
