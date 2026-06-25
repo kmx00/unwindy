@@ -19,6 +19,8 @@ from .analyzer import Analysis, analyze
 from .errors import UnwindyError
 from .pe import PEFile
 from .render import (
+    FUNC_ALIGNS,
+    FUNC_COLUMN_TABLE,
     FUNC_COLUMNS,
     Painter,
     _enable_windows_vt,
@@ -37,10 +39,6 @@ PGUP, PGDN, HOME, END = "PGUP", "PGDN", "HOME", "END"
 ENTER, ESC, BACKSPACE = "ENTER", "ESC", "BACKSPACE"
 TAB, BACKTAB = "TAB", "BACKTAB"
 SHIFT_ENTER = "SHIFT_ENTER"
-
-# Column alignment, parallel to render.FUNC_COLUMNS:
-#         #    begin end  size prol code ops  flags stk  xsect handler real-start
-_ALIGNS = ["r", "l", "l", "r", "r", "r", "l", "l", "r", "l", "l", "l"]
 
 
 # --- ANSI-aware string helpers ----------------------------------------------
@@ -325,7 +323,7 @@ def _compose_rows(
             widths[i] = max(widths[i], len(r[i]))
 
     def cell(s: str, i: int) -> str:
-        return s.rjust(widths[i]) if _ALIGNS[i] == "r" else s.ljust(widths[i])
+        return s.rjust(widths[i]) if FUNC_ALIGNS[i] == "r" else s.ljust(widths[i])
 
     sep = "  "
     header = sep.join(cell(FUNC_COLUMNS[i], i) for i in range(cols))
@@ -614,7 +612,7 @@ class TuiApp:
         sep = "  "
         parts = []
         for i, name in enumerate(FUNC_COLUMNS):
-            cell = name.rjust(widths[i]) if _ALIGNS[i] == "r" else name.ljust(widths[i])
+            cell = name.rjust(widths[i]) if FUNC_ALIGNS[i] == "r" else name.ljust(widths[i])
             if self.sort_mode and i == self.sort_cursor:
                 cell = p.reverse(cell)
             elif self.sort_applied == i:
@@ -775,42 +773,8 @@ class TuiApp:
         return True
 
     def _sort_keyfn(self, col: int, pe):
-        def key(f: RuntimeFunction):
-            u = f.unwind_info
-            if col == 0:
-                return f.index if f.index is not None else -1
-            if col == 1:
-                return f.begin_address
-            if col == 2:
-                return f.end_address
-            if col == 3:
-                return f.size
-            if col == 4:
-                return u.size_of_prolog if u else -1
-            if col == 5:
-                return u.count_of_codes if u else -1
-            if col == 6:  # ops summary -> rank by stack footprint
-                return u.fixed_stack_alloc if u else -1
-            if col == 7:  # flags
-                if not u:
-                    return -1
-                return (
-                    (4 if u.is_chained else 0)
-                    + (2 if u.has_termination_handler else 0)
-                    + (1 if u.has_exception_handler else 0)
-                )
-            if col == 8:
-                return u.fixed_stack_alloc if u else -1
-            if col == 9:  # x-sect
-                return (1 if func_section_info(pe, f)[2] else 0, f.begin_address)
-            if col == 10:  # handler
-                return u.handler_rva if (u and u.handler_rva) else -1
-            if col == 11:  # real-start
-                t = f.trampoline
-                return (1 if t else 0, t.real_start if t else f.begin_address)
-            return f.begin_address
-
-        return key
+        sort_key = FUNC_COLUMN_TABLE[col].sort_key
+        return lambda f: sort_key(pe, f)
 
     def _sort_current(self) -> None:
         e = self.entry()

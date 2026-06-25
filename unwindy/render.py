@@ -266,10 +266,45 @@ def render_diagnostics(diags: Sequence[Diagnostic], painter: Painter) -> str:
 
 # --- function table ---------------------------------------------------------
 
-FUNC_COLUMNS = [
-    "#", "begin", "end", "size", "prolog", "codes", "ops", "flags", "stack",
-    "x-sect", "handler", "real-start",
-]
+# Column metadata is the single source of truth for the function table: name,
+# alignment, cell value, sort key and (optional) color all live in one place so
+# the CLI table, the TUI list and the sorter can never drift out of sync.
+
+
+def _ops_color(raw: object) -> Optional[str]:
+    return "dim" if str(raw) in ("-", ".") else "gray"
+
+
+def _flags_color(raw: object) -> Optional[str]:
+    s = str(raw)
+    if "CHAIN" in s:
+        return "magenta"
+    if "EH" in s or "UH" in s:
+        return "yellow"
+    return "dim" if s == "." else None
+
+
+def _xsect_color(raw: object) -> Optional[str]:
+    return "dim" if str(raw) == "-" else "red"
+
+
+def _handler_color(raw: object) -> Optional[str]:
+    return "dim" if str(raw) == "-" else "yellow"
+
+
+def _tramp_color(raw: object) -> Optional[str]:
+    return "dim" if str(raw) == "-" else "cyan"
+
+
+@dataclass(frozen=True)
+class Column:
+    """One function-table column: how to label, fill, sort and colour it."""
+
+    name: str
+    align: str  # 'l' | 'r'
+    value: Callable[[PEFile, RuntimeFunction, bool], object]
+    sort_key: Callable[[PEFile, RuntimeFunction], object]
+    color: Optional[Callable[[object], Optional[str]]] = None
 
 
 def addr_label(pe: PEFile, rva: int, *, use_va: bool) -> str:
@@ -356,27 +391,78 @@ def unwind_summary(ui: Optional[UnwindInfo]) -> str:
     return " ".join(parts) if parts else "."
 
 
-def function_row(pe: PEFile, f: RuntimeFunction, *, use_va: bool) -> List[object]:
+def _handler_cell(pe: PEFile, f: RuntimeFunction, use_va: bool) -> object:
     ui = f.unwind_info
-    handler = "-"
     if ui and ui.handler_data is not None:
-        handler = ui.handler_data.tag()
-    elif ui and ui.handler_rva:
-        handler = addr_label(pe, ui.handler_rva, use_va=use_va)
-    return [
-        "-" if f.index is None else f.index,
-        addr_label(pe, f.begin_address, use_va=use_va),
-        addr_label(pe, f.end_address, use_va=use_va),
-        f"{f.size:#x}",
-        f"{ui.size_of_prolog:#x}" if ui else "-",
-        ui.count_of_codes if ui else "-",
-        unwind_summary(ui),
-        _flags_label(ui),
-        f"{ui.fixed_stack_alloc:#x}" if ui else "-",
-        xsect_label(pe, f),
-        handler,
-        trampoline_label(pe, f, use_va=use_va),
-    ]
+        return ui.handler_data.tag()
+    if ui and ui.handler_rva:
+        return addr_label(pe, ui.handler_rva, use_va=use_va)
+    return "-"
+
+
+def _flags_sort(f: RuntimeFunction) -> int:
+    u = f.unwind_info
+    if not u:
+        return -1
+    return (
+        (4 if u.is_chained else 0)
+        + (2 if u.has_termination_handler else 0)
+        + (1 if u.has_exception_handler else 0)
+    )
+
+
+FUNC_COLUMN_TABLE: List[Column] = [
+    Column("#", "r",
+           lambda pe, f, va: "-" if f.index is None else f.index,
+           lambda pe, f: f.index if f.index is not None else -1),
+    Column("begin", "l",
+           lambda pe, f, va: addr_label(pe, f.begin_address, use_va=va),
+           lambda pe, f: f.begin_address),
+    Column("end", "l",
+           lambda pe, f, va: addr_label(pe, f.end_address, use_va=va),
+           lambda pe, f: f.end_address),
+    Column("size", "r",
+           lambda pe, f, va: f"{f.size:#x}",
+           lambda pe, f: f.size),
+    Column("prolog", "r",
+           lambda pe, f, va: f"{f.unwind_info.size_of_prolog:#x}" if f.unwind_info else "-",
+           lambda pe, f: f.unwind_info.size_of_prolog if f.unwind_info else -1),
+    Column("codes", "r",
+           lambda pe, f, va: f.unwind_info.count_of_codes if f.unwind_info else "-",
+           lambda pe, f: f.unwind_info.count_of_codes if f.unwind_info else -1),
+    Column("ops", "l",
+           lambda pe, f, va: unwind_summary(f.unwind_info),
+           lambda pe, f: f.unwind_info.fixed_stack_alloc if f.unwind_info else -1,
+           _ops_color),
+    Column("flags", "l",
+           lambda pe, f, va: _flags_label(f.unwind_info),
+           lambda pe, f: _flags_sort(f),
+           _flags_color),
+    Column("stack", "r",
+           lambda pe, f, va: f"{f.unwind_info.fixed_stack_alloc:#x}" if f.unwind_info else "-",
+           lambda pe, f: f.unwind_info.fixed_stack_alloc if f.unwind_info else -1),
+    Column("x-sect", "l",
+           lambda pe, f, va: xsect_label(pe, f),
+           lambda pe, f: (1 if func_section_info(pe, f)[2] else 0, f.begin_address),
+           _xsect_color),
+    Column("handler", "l",
+           _handler_cell,
+           lambda pe, f: f.unwind_info.handler_rva
+           if (f.unwind_info and f.unwind_info.handler_rva) else -1,
+           _handler_color),
+    Column("real-start", "l",
+           lambda pe, f, va: trampoline_label(pe, f, use_va=va),
+           lambda pe, f: (1 if f.trampoline else 0,
+                          f.trampoline.real_start if f.trampoline else f.begin_address),
+           _tramp_color),
+]
+
+FUNC_COLUMNS = [c.name for c in FUNC_COLUMN_TABLE]
+FUNC_ALIGNS = [c.align for c in FUNC_COLUMN_TABLE]
+
+
+def function_row(pe: PEFile, f: RuntimeFunction, *, use_va: bool) -> List[object]:
+    return [c.value(pe, f, use_va) for c in FUNC_COLUMN_TABLE]
 
 
 def render_function_table(
@@ -388,32 +474,19 @@ def render_function_table(
 ) -> str:
     p = painter
 
-    def color_flags(padded: str, raw: object) -> str:
-        s = str(raw)
-        if "CHAIN" in s:
-            return p.magenta(padded)
-        if "EH" in s or "UH" in s:
-            return p.yellow(padded)
-        return p.dim(padded) if s == "." else padded
+    def make_color(col: Column):
+        if col.color is None:
+            return None
 
-    def color_handler(padded: str, raw: object) -> str:
-        return p.dim(padded) if str(raw) == "-" else p.yellow(padded)
+        def fn(padded: str, raw: object) -> str:
+            name = col.color(raw)
+            return p.wrap(padded, name) if name else padded
 
-    def color_xsect(padded: str, raw: object) -> str:
-        return p.dim(padded) if str(raw) == "-" else p.red(padded)
-
-    def color_ops(padded: str, raw: object) -> str:
-        return p.dim(padded) if str(raw) in ("-", ".") else p.gray(padded)
-
-    def color_tramp(padded: str, raw: object) -> str:
-        return p.dim(padded) if str(raw) == "-" else p.cyan(padded)
+        return fn
 
     rows = [function_row(pe, f, use_va=use_va) for f in functions]
-    #         #    begin end  size prol code ops    flags stack xsect handler real-start
-    aligns = ["r", "l", "l", "r", "r", "r", "l", "l", "r", "l", "l", "l"]
-    col_color = [None, None, None, None, None, None, color_ops, color_flags,
-                 None, color_xsect, color_handler, color_tramp]
-    return format_table(FUNC_COLUMNS, rows, aligns, p, col_color)
+    col_color = [make_color(c) for c in FUNC_COLUMN_TABLE]
+    return format_table(FUNC_COLUMNS, rows, FUNC_ALIGNS, p, col_color)
 
 
 # --- forwarding flow --------------------------------------------------------
