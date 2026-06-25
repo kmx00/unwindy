@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import bisect
 import struct
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from .branch import direct_call_or_jump, follow_jump
@@ -72,8 +72,19 @@ def _u32(b: bytes) -> int:
 # --- decoded structures -----------------------------------------------------
 
 
+class _JsonDataclass:
+    """Mixin: a dataclass whose JSON form is exactly its fields (recursively).
+
+    Used by the records whose serialization is a straight field mirror; classes
+    that curate their JSON shape (omit/rename/compute fields) keep a bespoke
+    ``to_dict``."""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
 @dataclass
-class ScopeRecord:
+class ScopeRecord(_JsonDataclass):
     """One ``__try`` region from a ``__C_specific_handler`` scope table."""
 
     begin: int
@@ -81,15 +92,6 @@ class ScopeRecord:
     handler: int  # __except filter RVA, 1 (EXECUTE_HANDLER), or __finally routine RVA
     target: int  # __except body RVA, 0 for __finally
     kind: str
-
-    def to_dict(self) -> dict:
-        return {
-            "begin": self.begin,
-            "end": self.end,
-            "handler": self.handler,
-            "target": self.target,
-            "kind": self.kind,
-        }
 
 
 @dataclass
@@ -116,7 +118,7 @@ class GsData:
 
 
 @dataclass
-class CxxCatch:
+class CxxCatch(_JsonDataclass):
     """A ``HandlerType`` entry: one ``catch`` clause."""
 
     adjectives: int
@@ -125,18 +127,9 @@ class CxxCatch:
     handler_rva: int  # catch funclet RVA
     frame_offset: int  # dispFrame (x64)
 
-    def to_dict(self) -> dict:
-        return {
-            "adjectives": self.adjectives,
-            "type_rva": self.type_rva,
-            "catch_object_offset": self.catch_object_offset,
-            "handler_rva": self.handler_rva,
-            "frame_offset": self.frame_offset,
-        }
-
 
 @dataclass
-class CxxTryBlock:
+class CxxTryBlock(_JsonDataclass):
     """A ``TryBlockMapEntry``: a ``try`` and its ``catch`` clauses (by state)."""
 
     try_low: int
@@ -146,19 +139,9 @@ class CxxTryBlock:
     handler_array_rva: int
     catches: List[CxxCatch] = field(default_factory=list)
 
-    def to_dict(self) -> dict:
-        return {
-            "try_low": self.try_low,
-            "try_high": self.try_high,
-            "catch_high": self.catch_high,
-            "n_catches": self.n_catches,
-            "handler_array_rva": self.handler_array_rva,
-            "catches": [c.to_dict() for c in self.catches],
-        }
-
 
 @dataclass
-class CxxFuncInfo:
+class CxxFuncInfo(_JsonDataclass):
     """MSVC C++ ``FuncInfo`` (FH3) for ``__CxxFrameHandler``/2/3."""
 
     funcinfo_rva: int
@@ -175,24 +158,6 @@ class CxxFuncInfo:
     es_type_list_rva: int  # 0 unless magic >= 0x19930521
     eh_flags: int  # 0 unless magic >= 0x19930522
     try_blocks: List[CxxTryBlock] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return {
-            "funcinfo_rva": self.funcinfo_rva,
-            "magic": self.magic,
-            "version": self.version,
-            "bbt_flags": self.bbt_flags,
-            "max_state": self.max_state,
-            "unwind_map_rva": self.unwind_map_rva,
-            "try_block_map_rva": self.try_block_map_rva,
-            "n_try_blocks": self.n_try_blocks,
-            "ip_to_state_map_rva": self.ip_to_state_map_rva,
-            "n_ip_entries": self.n_ip_entries,
-            "unwind_help_offset": self.unwind_help_offset,
-            "es_type_list_rva": self.es_type_list_rva,
-            "eh_flags": self.eh_flags,
-            "try_blocks": [t.to_dict() for t in self.try_blocks],
-        }
 
 
 @dataclass
