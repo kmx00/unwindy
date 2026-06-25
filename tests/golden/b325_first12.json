@@ -1,0 +1,1315 @@
+{
+  "diagnostics": [],
+  "entry_point_rva": 8276,
+  "exception_directory": {
+    "count": 919,
+    "rva": 430080,
+    "size": 11028
+  },
+  "file": "D:\\Code\\unwindy\\samples\\b325e5a8da4f8bea2db9fc118f6a6f237731d734.bin",
+  "functions": [
+    {
+      "begin_rva": 22288,
+      "begin_section": ".text",
+      "begin_va": 5368731408,
+      "crosses_section": false,
+      "end_rva": 22512,
+      "end_section": ".text",
+      "index": 0,
+      "size": 224,
+      "trampoline": null,
+      "unwind_info": {
+        "codes": [
+          {
+            "alloc_size": 40,
+            "code_offset": 9,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_ALLOC_SMALL",
+            "op_info": 4,
+            "register": null,
+            "save_offset": null,
+            "text": "sub rsp, 0x28"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 5,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 7,
+            "register": "rdi",
+            "save_offset": null,
+            "text": "push rdi"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 4,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 6,
+            "register": "rsi",
+            "save_offset": null,
+            "text": "push rsi"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 3,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 5,
+            "register": "rbp",
+            "save_offset": null,
+            "text": "push rbp"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 2,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 3,
+            "register": "rbx",
+            "save_offset": null,
+            "text": "push rbx"
+          }
+        ],
+        "count_of_codes": 5,
+        "fixed_stack_alloc": 72,
+        "flags": [
+          "NHANDLER"
+        ],
+        "frame_offset": 0,
+        "frame_register": null,
+        "handler_data": null,
+        "handler_kind": null,
+        "handler_rva": null,
+        "language_data_rva": null,
+        "rva": 406436,
+        "size_of_prolog": 9,
+        "struct_size": 16,
+        "version": 1
+      },
+      "unwind_info_address": 406436
+    },
+    {
+      "begin_rva": 22576,
+      "begin_section": ".text",
+      "begin_va": 5368731696,
+      "crosses_section": false,
+      "end_rva": 22642,
+      "end_section": ".text",
+      "index": 1,
+      "size": 66,
+      "trampoline": null,
+      "unwind_info": {
+        "codes": [
+          {
+            "alloc_size": null,
+            "code_offset": 12,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 2,
+            "op": "UWOP_SAVE_NONVOL",
+            "op_info": 3,
+            "register": "rbx",
+            "save_offset": 80,
+            "text": "mov [rsp+0x50], rbx"
+          },
+          {
+            "alloc_size": 32,
+            "code_offset": 12,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_ALLOC_SMALL",
+            "op_info": 3,
+            "register": null,
+            "save_offset": null,
+            "text": "sub rsp, 0x20"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 8,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 7,
+            "register": "rdi",
+            "save_offset": null,
+            "text": "push rdi"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 7,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 6,
+            "register": "rsi",
+            "save_offset": null,
+            "text": "push rsi"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 6,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 5,
+            "register": "rbp",
+            "save_offset": null,
+            "text": "push rbp"
+          }
+        ],
+        "count_of_codes": 6,
+        "fixed_stack_alloc": 56,
+        "flags": [
+          "NHANDLER"
+        ],
+        "frame_offset": 0,
+        "frame_register": null,
+        "handler_data": null,
+        "handler_kind": null,
+        "handler_rva": null,
+        "language_data_rva": null,
+        "rva": 405464,
+        "size_of_prolog": 12,
+        "struct_size": 16,
+        "version": 1
+      },
+      "unwind_info_address": 405464
+    },
+    {
+      "begin_rva": 22642,
+      "begin_section": ".text",
+      "begin_va": 5368731762,
+      "crosses_section": false,
+      "end_rva": 22830,
+      "end_section": ".text",
+      "index": 2,
+      "size": 188,
+      "trampoline": null,
+      "unwind_info": {
+        "chained": {
+          "begin_rva": 22576,
+          "begin_section": ".text",
+          "begin_va": 5368731696,
+          "crosses_section": false,
+          "end_rva": 22642,
+          "end_section": ".text",
+          "index": null,
+          "size": 66,
+          "trampoline": null,
+          "unwind_info": {
+            "codes": [
+              {
+                "alloc_size": null,
+                "code_offset": 12,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 2,
+                "op": "UWOP_SAVE_NONVOL",
+                "op_info": 3,
+                "register": "rbx",
+                "save_offset": 80,
+                "text": "mov [rsp+0x50], rbx"
+              },
+              {
+                "alloc_size": 32,
+                "code_offset": 12,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_ALLOC_SMALL",
+                "op_info": 3,
+                "register": null,
+                "save_offset": null,
+                "text": "sub rsp, 0x20"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 8,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 7,
+                "register": "rdi",
+                "save_offset": null,
+                "text": "push rdi"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 7,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 6,
+                "register": "rsi",
+                "save_offset": null,
+                "text": "push rsi"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 6,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 5,
+                "register": "rbp",
+                "save_offset": null,
+                "text": "push rbp"
+              }
+            ],
+            "count_of_codes": 6,
+            "fixed_stack_alloc": 56,
+            "flags": [
+              "NHANDLER"
+            ],
+            "frame_offset": 0,
+            "frame_register": null,
+            "handler_data": null,
+            "handler_kind": null,
+            "handler_rva": null,
+            "language_data_rva": null,
+            "rva": 405464,
+            "size_of_prolog": 12,
+            "struct_size": 16,
+            "version": 1
+          },
+          "unwind_info_address": 405464
+        },
+        "codes": [
+          {
+            "alloc_size": null,
+            "code_offset": 5,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 2,
+            "op": "UWOP_SAVE_NONVOL",
+            "op_info": 14,
+            "register": "r14",
+            "save_offset": 72,
+            "text": "mov [rsp+0x48], r14"
+          }
+        ],
+        "count_of_codes": 2,
+        "fixed_stack_alloc": 0,
+        "flags": [
+          "CHAININFO"
+        ],
+        "frame_offset": 0,
+        "frame_register": null,
+        "handler_data": null,
+        "handler_kind": null,
+        "handler_rva": null,
+        "language_data_rva": null,
+        "rva": 405484,
+        "size_of_prolog": 5,
+        "struct_size": 20,
+        "version": 1
+      },
+      "unwind_info_address": 405484
+    },
+    {
+      "begin_rva": 22830,
+      "begin_section": ".text",
+      "begin_va": 5368731950,
+      "crosses_section": false,
+      "end_rva": 22860,
+      "end_section": ".text",
+      "index": 3,
+      "size": 30,
+      "trampoline": null,
+      "unwind_info": {
+        "chained": {
+          "begin_rva": 22576,
+          "begin_section": ".text",
+          "begin_va": 5368731696,
+          "crosses_section": false,
+          "end_rva": 22642,
+          "end_section": ".text",
+          "index": null,
+          "size": 66,
+          "trampoline": null,
+          "unwind_info": {
+            "codes": [
+              {
+                "alloc_size": null,
+                "code_offset": 12,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 2,
+                "op": "UWOP_SAVE_NONVOL",
+                "op_info": 3,
+                "register": "rbx",
+                "save_offset": 80,
+                "text": "mov [rsp+0x50], rbx"
+              },
+              {
+                "alloc_size": 32,
+                "code_offset": 12,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_ALLOC_SMALL",
+                "op_info": 3,
+                "register": null,
+                "save_offset": null,
+                "text": "sub rsp, 0x20"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 8,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 7,
+                "register": "rdi",
+                "save_offset": null,
+                "text": "push rdi"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 7,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 6,
+                "register": "rsi",
+                "save_offset": null,
+                "text": "push rsi"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 6,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 5,
+                "register": "rbp",
+                "save_offset": null,
+                "text": "push rbp"
+              }
+            ],
+            "count_of_codes": 6,
+            "fixed_stack_alloc": 56,
+            "flags": [
+              "NHANDLER"
+            ],
+            "frame_offset": 0,
+            "frame_register": null,
+            "handler_data": null,
+            "handler_kind": null,
+            "handler_rva": null,
+            "language_data_rva": null,
+            "rva": 405464,
+            "size_of_prolog": 12,
+            "struct_size": 16,
+            "version": 1
+          },
+          "unwind_info_address": 405464
+        },
+        "codes": [],
+        "count_of_codes": 0,
+        "fixed_stack_alloc": 0,
+        "flags": [
+          "CHAININFO"
+        ],
+        "frame_offset": 0,
+        "frame_register": null,
+        "handler_data": null,
+        "handler_kind": null,
+        "handler_rva": null,
+        "language_data_rva": null,
+        "rva": 405508,
+        "size_of_prolog": 0,
+        "struct_size": 16,
+        "version": 1
+      },
+      "unwind_info_address": 405508
+    },
+    {
+      "begin_rva": 22944,
+      "begin_section": ".text",
+      "begin_va": 5368732064,
+      "crosses_section": false,
+      "end_rva": 22995,
+      "end_section": ".text",
+      "index": 4,
+      "size": 51,
+      "trampoline": null,
+      "unwind_info": {
+        "codes": [
+          {
+            "alloc_size": 32,
+            "code_offset": 6,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_ALLOC_SMALL",
+            "op_info": 3,
+            "register": null,
+            "save_offset": null,
+            "text": "sub rsp, 0x20"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 2,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 3,
+            "register": "rbx",
+            "save_offset": null,
+            "text": "push rbx"
+          }
+        ],
+        "count_of_codes": 2,
+        "fixed_stack_alloc": 40,
+        "flags": [
+          "NHANDLER"
+        ],
+        "frame_offset": 0,
+        "frame_register": null,
+        "handler_data": null,
+        "handler_kind": null,
+        "handler_rva": null,
+        "language_data_rva": null,
+        "rva": 404832,
+        "size_of_prolog": 6,
+        "struct_size": 8,
+        "version": 1
+      },
+      "unwind_info_address": 404832
+    },
+    {
+      "begin_rva": 23344,
+      "begin_section": ".text",
+      "begin_va": 5368732464,
+      "crosses_section": false,
+      "end_rva": 23412,
+      "end_section": ".text",
+      "index": 5,
+      "size": 68,
+      "trampoline": null,
+      "unwind_info": {
+        "codes": [
+          {
+            "alloc_size": null,
+            "code_offset": 10,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 2,
+            "op": "UWOP_SAVE_NONVOL",
+            "op_info": 3,
+            "register": "rbx",
+            "save_offset": 48,
+            "text": "mov [rsp+0x30], rbx"
+          },
+          {
+            "alloc_size": 32,
+            "code_offset": 10,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_ALLOC_SMALL",
+            "op_info": 3,
+            "register": null,
+            "save_offset": null,
+            "text": "sub rsp, 0x20"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 6,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 7,
+            "register": "rdi",
+            "save_offset": null,
+            "text": "push rdi"
+          }
+        ],
+        "count_of_codes": 4,
+        "fixed_stack_alloc": 40,
+        "flags": [
+          "NHANDLER"
+        ],
+        "frame_offset": 0,
+        "frame_register": null,
+        "handler_data": null,
+        "handler_kind": null,
+        "handler_rva": null,
+        "language_data_rva": null,
+        "rva": 406540,
+        "size_of_prolog": 10,
+        "struct_size": 12,
+        "version": 1
+      },
+      "unwind_info_address": 406540
+    },
+    {
+      "begin_rva": 23504,
+      "begin_section": ".text",
+      "begin_va": 5368732624,
+      "crosses_section": false,
+      "end_rva": 23661,
+      "end_section": ".text",
+      "index": 6,
+      "size": 157,
+      "trampoline": null,
+      "unwind_info": {
+        "codes": [
+          {
+            "alloc_size": null,
+            "code_offset": 15,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 2,
+            "op": "UWOP_SAVE_NONVOL",
+            "op_info": 6,
+            "register": "rsi",
+            "save_offset": 80,
+            "text": "mov [rsp+0x50], rsi"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 15,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 2,
+            "op": "UWOP_SAVE_NONVOL",
+            "op_info": 3,
+            "register": "rbx",
+            "save_offset": 72,
+            "text": "mov [rsp+0x48], rbx"
+          },
+          {
+            "alloc_size": 48,
+            "code_offset": 15,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_ALLOC_SMALL",
+            "op_info": 5,
+            "register": null,
+            "save_offset": null,
+            "text": "sub rsp, 0x30"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 11,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 7,
+            "register": "rdi",
+            "save_offset": null,
+            "text": "push rdi"
+          }
+        ],
+        "count_of_codes": 6,
+        "fixed_stack_alloc": 56,
+        "flags": [
+          "UHANDLER"
+        ],
+        "frame_offset": 0,
+        "frame_register": null,
+        "handler_data": {
+          "cxx_funcinfo": null,
+          "dll": "VCRUNTIME140_1.dll",
+          "fh4": {
+            "flags": [
+              "UnwindMap",
+              "EHs"
+            ],
+            "funcinfo_rva": 404794,
+            "header": 40
+          },
+          "gs": null,
+          "handler_rva": 338142,
+          "kind": "cxx4",
+          "lsda_rva": 404788,
+          "notes": [],
+          "raw_head": "3a2d0600000028432d06004a2d0600020a561e000080043800f602000106020006320230010602000632023001060200",
+          "routine_name": "__CxxFrameHandler4",
+          "routine_rva": 338142,
+          "routine_section": ".text",
+          "scopes": [],
+          "wraps": null
+        },
+        "handler_kind": "termination",
+        "handler_rva": 338142,
+        "language_data_rva": 404788,
+        "rva": 404768,
+        "size_of_prolog": 15,
+        "struct_size": 20,
+        "version": 1
+      },
+      "unwind_info_address": 404768
+    },
+    {
+      "begin_rva": 23968,
+      "begin_section": ".text",
+      "begin_va": 5368733088,
+      "crosses_section": false,
+      "end_rva": 24034,
+      "end_section": ".text",
+      "index": 7,
+      "size": 66,
+      "trampoline": null,
+      "unwind_info": {
+        "codes": [
+          {
+            "alloc_size": 32,
+            "code_offset": 6,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_ALLOC_SMALL",
+            "op_info": 3,
+            "register": null,
+            "save_offset": null,
+            "text": "sub rsp, 0x20"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 2,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 3,
+            "register": "rbx",
+            "save_offset": null,
+            "text": "push rbx"
+          }
+        ],
+        "count_of_codes": 2,
+        "fixed_stack_alloc": 40,
+        "flags": [
+          "NHANDLER"
+        ],
+        "frame_offset": 0,
+        "frame_register": null,
+        "handler_data": null,
+        "handler_kind": null,
+        "handler_rva": null,
+        "language_data_rva": null,
+        "rva": 405992,
+        "size_of_prolog": 6,
+        "struct_size": 8,
+        "version": 1
+      },
+      "unwind_info_address": 405992
+    },
+    {
+      "begin_rva": 24064,
+      "begin_section": ".text",
+      "begin_va": 5368733184,
+      "crosses_section": false,
+      "end_rva": 24123,
+      "end_section": ".text",
+      "index": 8,
+      "size": 59,
+      "trampoline": null,
+      "unwind_info": {
+        "codes": [
+          {
+            "alloc_size": 40,
+            "code_offset": 4,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_ALLOC_SMALL",
+            "op_info": 4,
+            "register": null,
+            "save_offset": null,
+            "text": "sub rsp, 0x28"
+          }
+        ],
+        "count_of_codes": 1,
+        "fixed_stack_alloc": 40,
+        "flags": [
+          "NHANDLER"
+        ],
+        "frame_offset": 0,
+        "frame_register": null,
+        "handler_data": null,
+        "handler_kind": null,
+        "handler_rva": null,
+        "language_data_rva": null,
+        "rva": 406360,
+        "size_of_prolog": 4,
+        "struct_size": 8,
+        "version": 1
+      },
+      "unwind_info_address": 406360
+    },
+    {
+      "begin_rva": 24144,
+      "begin_section": ".text",
+      "begin_va": 5368733264,
+      "crosses_section": false,
+      "end_rva": 24256,
+      "end_section": ".text",
+      "index": 9,
+      "size": 112,
+      "trampoline": null,
+      "unwind_info": {
+        "codes": [
+          {
+            "alloc_size": null,
+            "code_offset": 16,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 2,
+            "op": "UWOP_SAVE_NONVOL",
+            "op_info": 3,
+            "register": "rbx",
+            "save_offset": 96,
+            "text": "mov [rsp+0x60], rbx"
+          },
+          {
+            "alloc_size": 32,
+            "code_offset": 16,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_ALLOC_SMALL",
+            "op_info": 3,
+            "register": null,
+            "save_offset": null,
+            "text": "sub rsp, 0x20"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 12,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 14,
+            "register": "r14",
+            "save_offset": null,
+            "text": "push r14"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 10,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 13,
+            "register": "r13",
+            "save_offset": null,
+            "text": "push r13"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 8,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 7,
+            "register": "rdi",
+            "save_offset": null,
+            "text": "push rdi"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 7,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 6,
+            "register": "rsi",
+            "save_offset": null,
+            "text": "push rsi"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 6,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 1,
+            "op": "UWOP_PUSH_NONVOL",
+            "op_info": 5,
+            "register": "rbp",
+            "save_offset": null,
+            "text": "push rbp"
+          }
+        ],
+        "count_of_codes": 8,
+        "fixed_stack_alloc": 72,
+        "flags": [
+          "NHANDLER"
+        ],
+        "frame_offset": 0,
+        "frame_register": null,
+        "handler_data": null,
+        "handler_kind": null,
+        "handler_rva": null,
+        "language_data_rva": null,
+        "rva": 405268,
+        "size_of_prolog": 16,
+        "struct_size": 20,
+        "version": 1
+      },
+      "unwind_info_address": 405268
+    },
+    {
+      "begin_rva": 24256,
+      "begin_section": ".text",
+      "begin_va": 5368733376,
+      "crosses_section": false,
+      "end_rva": 24537,
+      "end_section": ".text",
+      "index": 10,
+      "size": 281,
+      "trampoline": null,
+      "unwind_info": {
+        "chained": {
+          "begin_rva": 24144,
+          "begin_section": ".text",
+          "begin_va": 5368733264,
+          "crosses_section": false,
+          "end_rva": 24256,
+          "end_section": ".text",
+          "index": null,
+          "size": 112,
+          "trampoline": null,
+          "unwind_info": {
+            "codes": [
+              {
+                "alloc_size": null,
+                "code_offset": 16,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 2,
+                "op": "UWOP_SAVE_NONVOL",
+                "op_info": 3,
+                "register": "rbx",
+                "save_offset": 96,
+                "text": "mov [rsp+0x60], rbx"
+              },
+              {
+                "alloc_size": 32,
+                "code_offset": 16,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_ALLOC_SMALL",
+                "op_info": 3,
+                "register": null,
+                "save_offset": null,
+                "text": "sub rsp, 0x20"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 12,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 14,
+                "register": "r14",
+                "save_offset": null,
+                "text": "push r14"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 10,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 13,
+                "register": "r13",
+                "save_offset": null,
+                "text": "push r13"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 8,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 7,
+                "register": "rdi",
+                "save_offset": null,
+                "text": "push rdi"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 7,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 6,
+                "register": "rsi",
+                "save_offset": null,
+                "text": "push rsi"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 6,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 5,
+                "register": "rbp",
+                "save_offset": null,
+                "text": "push rbp"
+              }
+            ],
+            "count_of_codes": 8,
+            "fixed_stack_alloc": 72,
+            "flags": [
+              "NHANDLER"
+            ],
+            "frame_offset": 0,
+            "frame_register": null,
+            "handler_data": null,
+            "handler_kind": null,
+            "handler_rva": null,
+            "language_data_rva": null,
+            "rva": 405268,
+            "size_of_prolog": 16,
+            "struct_size": 20,
+            "version": 1
+          },
+          "unwind_info_address": 405268
+        },
+        "codes": [
+          {
+            "alloc_size": null,
+            "code_offset": 17,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 2,
+            "op": "UWOP_SAVE_NONVOL",
+            "op_info": 15,
+            "register": "r15",
+            "save_offset": 88,
+            "text": "mov [rsp+0x58], r15"
+          },
+          {
+            "alloc_size": null,
+            "code_offset": 5,
+            "frame_offset": null,
+            "has_error_code": null,
+            "node_count": 2,
+            "op": "UWOP_SAVE_NONVOL",
+            "op_info": 12,
+            "register": "r12",
+            "save_offset": 80,
+            "text": "mov [rsp+0x50], r12"
+          }
+        ],
+        "count_of_codes": 4,
+        "fixed_stack_alloc": 0,
+        "flags": [
+          "CHAININFO"
+        ],
+        "frame_offset": 0,
+        "frame_register": null,
+        "handler_data": null,
+        "handler_kind": null,
+        "handler_rva": null,
+        "language_data_rva": null,
+        "rva": 405292,
+        "size_of_prolog": 17,
+        "struct_size": 24,
+        "version": 1
+      },
+      "unwind_info_address": 405292
+    },
+    {
+      "begin_rva": 24537,
+      "begin_section": ".text",
+      "begin_va": 5368733657,
+      "crosses_section": false,
+      "end_rva": 24563,
+      "end_section": ".text",
+      "index": 11,
+      "size": 26,
+      "trampoline": null,
+      "unwind_info": {
+        "chained": {
+          "begin_rva": 24144,
+          "begin_section": ".text",
+          "begin_va": 5368733264,
+          "crosses_section": false,
+          "end_rva": 24256,
+          "end_section": ".text",
+          "index": null,
+          "size": 112,
+          "trampoline": null,
+          "unwind_info": {
+            "codes": [
+              {
+                "alloc_size": null,
+                "code_offset": 16,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 2,
+                "op": "UWOP_SAVE_NONVOL",
+                "op_info": 3,
+                "register": "rbx",
+                "save_offset": 96,
+                "text": "mov [rsp+0x60], rbx"
+              },
+              {
+                "alloc_size": 32,
+                "code_offset": 16,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_ALLOC_SMALL",
+                "op_info": 3,
+                "register": null,
+                "save_offset": null,
+                "text": "sub rsp, 0x20"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 12,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 14,
+                "register": "r14",
+                "save_offset": null,
+                "text": "push r14"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 10,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 13,
+                "register": "r13",
+                "save_offset": null,
+                "text": "push r13"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 8,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 7,
+                "register": "rdi",
+                "save_offset": null,
+                "text": "push rdi"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 7,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 6,
+                "register": "rsi",
+                "save_offset": null,
+                "text": "push rsi"
+              },
+              {
+                "alloc_size": null,
+                "code_offset": 6,
+                "frame_offset": null,
+                "has_error_code": null,
+                "node_count": 1,
+                "op": "UWOP_PUSH_NONVOL",
+                "op_info": 5,
+                "register": "rbp",
+                "save_offset": null,
+                "text": "push rbp"
+              }
+            ],
+            "count_of_codes": 8,
+            "fixed_stack_alloc": 72,
+            "flags": [
+              "NHANDLER"
+            ],
+            "frame_offset": 0,
+            "frame_register": null,
+            "handler_data": null,
+            "handler_kind": null,
+            "handler_rva": null,
+            "language_data_rva": null,
+            "rva": 405268,
+            "size_of_prolog": 16,
+            "struct_size": 20,
+            "version": 1
+          },
+          "unwind_info_address": 405268
+        },
+        "codes": [],
+        "count_of_codes": 0,
+        "fixed_stack_alloc": 0,
+        "flags": [
+          "CHAININFO"
+        ],
+        "frame_offset": 0,
+        "frame_register": null,
+        "handler_data": null,
+        "handler_kind": null,
+        "handler_rva": null,
+        "language_data_rva": null,
+        "rva": 405320,
+        "size_of_prolog": 0,
+        "struct_size": 16,
+        "version": 1
+      },
+      "unwind_info_address": 405320
+    }
+  ],
+  "image_base": 5368709120,
+  "is_dll": false,
+  "machine": "AMD64",
+  "sections": [
+    {
+      "characteristics": 1610612768,
+      "executable": true,
+      "index": 0,
+      "name": ".text",
+      "raw_ptr": 1024,
+      "raw_size": 360960,
+      "readable": true,
+      "rva": 4096,
+      "virtual_size": 360505,
+      "writable": false
+    },
+    {
+      "characteristics": 1073741888,
+      "executable": false,
+      "index": 1,
+      "name": ".rdata",
+      "raw_ptr": 361984,
+      "raw_size": 53760,
+      "readable": true,
+      "rva": 368640,
+      "virtual_size": 53300,
+      "writable": false
+    },
+    {
+      "characteristics": 3221225536,
+      "executable": false,
+      "index": 2,
+      "name": ".data",
+      "raw_ptr": 415744,
+      "raw_size": 3072,
+      "readable": true,
+      "rva": 425984,
+      "virtual_size": 3121,
+      "writable": true
+    },
+    {
+      "characteristics": 1073741888,
+      "executable": false,
+      "index": 3,
+      "name": ".pdata",
+      "raw_ptr": 418816,
+      "raw_size": 12800,
+      "readable": true,
+      "rva": 430080,
+      "virtual_size": 12420,
+      "writable": false
+    },
+    {
+      "characteristics": 1073741888,
+      "executable": false,
+      "index": 4,
+      "name": ".idata",
+      "raw_ptr": 431616,
+      "raw_size": 11776,
+      "readable": true,
+      "rva": 446464,
+      "virtual_size": 11512,
+      "writable": false
+    },
+    {
+      "characteristics": 1073741888,
+      "executable": false,
+      "index": 5,
+      "name": ".00cfg",
+      "raw_ptr": 443392,
+      "raw_size": 512,
+      "readable": true,
+      "rva": 458752,
+      "virtual_size": 373,
+      "writable": false
+    },
+    {
+      "characteristics": 1073741888,
+      "executable": false,
+      "index": 6,
+      "name": ".rsrc",
+      "raw_ptr": 443904,
+      "raw_size": 1536,
+      "readable": true,
+      "rva": 462848,
+      "virtual_size": 1113,
+      "writable": false
+    },
+    {
+      "characteristics": 1107296320,
+      "executable": false,
+      "index": 7,
+      "name": ".reloc",
+      "raw_ptr": 445440,
+      "raw_size": 2048,
+      "readable": true,
+      "rva": 466944,
+      "virtual_size": 1881,
+      "writable": false
+    }
+  ],
+  "size_of_image": 471040,
+  "stats": {
+    "chained": 252,
+    "function_count": 919,
+    "handlers": 143,
+    "ops": {
+      "UWOP_ALLOC_LARGE": 105,
+      "UWOP_ALLOC_SMALL": 510,
+      "UWOP_PUSH_NONVOL": 1214,
+      "UWOP_SAVE_NONVOL": 500,
+      "UWOP_SAVE_XMM128": 363
+    },
+    "shown": 12
+  }
+}
