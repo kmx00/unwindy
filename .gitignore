@@ -20,3 +20,6 @@ htmlcov/
 .vscode/
 .idea/
 *.swp
+
+# Local scratch / notes (not tracked)
+kiyo-ignore/
