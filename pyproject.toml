@@ -8,23 +8,28 @@ version = "0.0.6"
 description = "Slim PE64 x64 exception/unwind information viewer (no heavy deps)"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
-authors = [{ name = "unwindy" }]
+license = { file = "LICENSE" }
+authors = [{ name = "kmx00" }]
 keywords = ["pe", "pe64", "x64", "unwind", "exception", "uwop", "rtl", "seh"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Software Development :: Disassemblers",
     "Operating System :: OS Independent",
+    "License :: Other/Proprietary License",
 ]
-# The PE/unwind core is pure standard library; iced-x86 powers only the
-# interactive forwarding-flow disassembly view (imported lazily).
-dependencies = ["iced-x86>=1.18"]
+# Zero hard runtime dependencies: the PE/unwind core is pure standard library.
+# The interactive forwarding-flow disassembly view uses iced-x86, exposed as an
+# optional extra and imported lazily so the base install stays dependency-free.
+dependencies = []
+
+[project.optional-dependencies]
+flow = ["iced-x86>=1.18"]
 
 [project.scripts]
 unwindy = "unwindy.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/unwindy/unwindy"
+Homepage = "https://github.com/kmx00/unwindy"
 
 [tool.setuptools]
 packages = ["unwindy", "unwindy.tui"]

@@ -7,11 +7,12 @@ resolves chained unwind info, surfaces language-specific handlers, and loudly
 warns about anything that looks off — while raising on data that violates the
 spec.
 
-The PE/unwind core is pure Python standard library — no `lief`, no `pefile`,
-no `rich`. The interactive **forwarding-flow** view additionally uses
-[`iced-x86`](https://pypi.org/project/iced-x86/) to disassemble basic blocks;
-it is imported lazily, so the core still runs without it. Linux and Windows,
-any CPython ≥ 3.9.
+**Zero hard dependencies** — the PE/unwind core is pure Python standard library
+(no `lief`, `pefile`, or `rich`). The interactive **forwarding-flow** view uses
+[`iced-x86`](https://pypi.org/project/iced-x86/) to disassemble basic blocks; it
+is an optional extra (`pip install unwindy[flow]`), imported lazily, so the base
+install stays dependency-free and everything else runs without it. Linux and
+Windows, any CPython ≥ 3.9.
 
 ## Why
 
@@ -38,7 +39,8 @@ python -m unwindy samples/                 # opens the TUI
 Or install the console script:
 
 ```sh
-pip install -e .
+pip install -e .            # core (zero dependencies)
+pip install -e ".[flow]"    # + iced-x86 for the interactive flow view
 unwindy path/to/binary.exe
 ```
 
@@ -209,9 +211,12 @@ for diag in analysis.diagnostics:
 ## Development
 
 ```sh
-bash scripts/dev.sh          # run tests + a smoke analysis of the sample
-python -m unittest discover -s tests -p 'test_*.py' -v
+python -m unittest discover -s tests -p 'test_*.py' -v   # full suite
+pip install ".[flow]"                                    # run the flow tests too
 ```
+
+CI (GitHub Actions) runs the suite on Linux and Windows, builds an installable
+wheel, and produces standalone PyInstaller binaries for both platforms.
 
 Tests are pure `unittest` (no third-party runner) and cover both bundled
 real-world samples and synthetic images built in `tests/_pebuilder.py` that
@@ -224,3 +229,9 @@ logic (driven without a real terminal).
 
 * [x64 exception handling](https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64)
 * x64 unwind information v3 (forward-looking; decoded best-effort as v2 today)
+
+## License
+
+Proprietary — Copyright (c) 2026 kmx00. **All rights reserved.** This software
+is provided for viewing only; no use, copying, modification, or redistribution
+is permitted. Contact the author (kmx00) for permission. See [LICENSE](LICENSE).
