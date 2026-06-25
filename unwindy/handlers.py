@@ -453,7 +453,7 @@ def decode_scope_table(
     return records, consumed
 
 
-def decode_gs_data(pe: PEFile, rva: int, bag: DiagnosticBag, where: str) -> GsData:
+def decode_gs_data(pe: PEFile, rva: int) -> GsData:
     """Decode ``GS_HANDLER_DATA``: a cookie offset whose low 3 bits flag
     EHandler/UHandler/HasAlignment, with two extra ints when aligned."""
     value = _u32(pe.read_at_rva(rva, 4))
@@ -609,6 +609,57 @@ def _classify_structural(
     hd.notes.append("language-specific data not recognized")
 
 
+def _kind_for(name: Optional[str], wraps: Optional[str]) -> Optional[str]:
+    """Map a handler routine name -- or the handler a GS-check *wraps* -- to the
+    layout kind of its language-specific data, or ``None`` if unrecognized."""
+    if wraps is not None:  # statically-linked GS-check wrapper: payload + GS data
+        if wraps in CXX_FH4_HANDLERS:
+            return "gs+cxx4"
+        if wraps in CXX_FH3_HANDLERS:
+            return "gs+cxx3"
+        if wraps in C_SCOPE_HANDLERS:
+            return "gs+scope"
+        return None
+    if name in C_SCOPE_HANDLERS:
+        return "scope"
+    if name in CXX_FH4_HANDLERS:
+        return "cxx4"
+    if name in CXX_FH3_HANDLERS:
+        return "cxx3"
+    return {
+        GS_PLAIN: "gs",
+        GS_SEH: "gs+scope",
+        GS_EH_FH3: "gs+cxx3",
+        GS_EH_FH4: "gs+cxx4",
+    }.get(name)
+
+
+def _decode_kind(
+    kind: str, pe: PEFile, begin: int, end: int, lsda: int,
+    hd: HandlerData, bag: DiagnosticBag, where: str,
+) -> None:
+    """Decode the language-specific payload for a resolved ``kind``.
+
+    The payload sits at ``lsda``: a ``scope`` table, or a FuncInfo RVA for
+    ``cxx3``/``cxx4``. A ``gs+`` prefix means ``GS_HANDLER_DATA`` trails the
+    payload -- after a scope table's consumed length, or 4 bytes after a
+    FuncInfo RVA. ``kind`` strings are the closed set produced by ``_kind_for``.
+    """
+    consumed = 0
+    if "scope" in kind:
+        records, consumed = decode_scope_table(pe, lsda, begin, end, bag, where)
+        hd.scope_records = records or []
+    elif "cxx3" in kind:
+        hd.cxx = decode_funcinfo3(pe, _u32(pe.read_at_rva(lsda, 4)), bag, where)
+        consumed = 4
+    elif "cxx4" in kind:
+        hd.fh4 = decode_fh4(pe, _u32(pe.read_at_rva(lsda, 4)), bag, where)
+        consumed = 4
+    if kind.startswith("gs"):
+        hd.gs = decode_gs_data(pe, lsda + consumed)
+    hd.kind = kind
+
+
 def _dispatch(
     pe: PEFile,
     begin: int,
@@ -618,63 +669,11 @@ def _dispatch(
     bag: DiagnosticBag,
     where: str,
 ) -> None:
-    name = hd.routine_name
-    wraps = hd.wraps
-
-    # Statically-linked GS-check wrapper: [FuncInfo RVA | scope table] + GS data.
-    if wraps is not None:
-        if wraps in CXX_FH4_HANDLERS:
-            hd.fh4 = decode_fh4(pe, _u32(pe.read_at_rva(lsda, 4)), bag, where)
-            hd.gs = decode_gs_data(pe, lsda + 4, bag, where)
-            hd.kind = "gs+cxx4"
-            return
-        if wraps in CXX_FH3_HANDLERS:
-            hd.cxx = decode_funcinfo3(pe, _u32(pe.read_at_rva(lsda, 4)), bag, where)
-            hd.gs = decode_gs_data(pe, lsda + 4, bag, where)
-            hd.kind = "gs+cxx3"
-            return
-        if wraps in C_SCOPE_HANDLERS:
-            records, consumed = decode_scope_table(pe, lsda, begin, end, bag, where)
-            hd.scope_records = records or []
-            hd.gs = decode_gs_data(pe, lsda + consumed, bag, where)
-            hd.kind = "gs+scope"
-            return
-
-    if name in C_SCOPE_HANDLERS:
-        records, _ = decode_scope_table(pe, lsda, begin, end, bag, where)
-        hd.scope_records = records or []
-        hd.kind = "scope"
-        return
-    if name in CXX_FH4_HANDLERS:
-        hd.fh4 = decode_fh4(pe, _u32(pe.read_at_rva(lsda, 4)), bag, where)
-        hd.kind = "cxx4"
-        return
-    if name in CXX_FH3_HANDLERS:
-        hd.cxx = decode_funcinfo3(pe, _u32(pe.read_at_rva(lsda, 4)), bag, where)
-        hd.kind = "cxx3"
-        return
-    if name == GS_PLAIN:
-        hd.gs = decode_gs_data(pe, lsda, bag, where)
-        hd.kind = "gs"
-        return
-    if name == GS_SEH:
-        records, consumed = decode_scope_table(pe, lsda, begin, end, bag, where)
-        hd.scope_records = records or []
-        hd.gs = decode_gs_data(pe, lsda + consumed, bag, where)
-        hd.kind = "gs+scope"
-        return
-    if name == GS_EH_FH3:
-        hd.cxx = decode_funcinfo3(pe, _u32(pe.read_at_rva(lsda, 4)), bag, where)
-        hd.gs = decode_gs_data(pe, lsda + 4, bag, where)
-        hd.kind = "gs+cxx3"
-        return
-    if name == GS_EH_FH4:
-        hd.fh4 = decode_fh4(pe, _u32(pe.read_at_rva(lsda, 4)), bag, where)
-        hd.gs = decode_gs_data(pe, lsda + 4, bag, where)
-        hd.kind = "gs+cxx4"
-        return
-
-    _classify_structural(pe, begin, end, lsda, hd, bag, where)
+    kind = _kind_for(hd.routine_name, hd.wraps)
+    if kind is None:
+        _classify_structural(pe, begin, end, lsda, hd, bag, where)
+    else:
+        _decode_kind(kind, pe, begin, end, lsda, hd, bag, where)
 
 
 def decode_handler_data(

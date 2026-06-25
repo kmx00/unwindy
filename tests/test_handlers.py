@@ -190,7 +190,7 @@ class ScopeTableTests(unittest.TestCase):
 class GsDataTests(unittest.TestCase):
     def test_cookie_offset_and_flags(self):
         pe = only_xdata(enc_gs(0x58, uh=True))
-        gs = decode_gs_data(pe, XBASE, DiagnosticBag(), "t")
+        gs = decode_gs_data(pe, XBASE)
         self.assertEqual(gs.cookie_offset, 0x58)
         self.assertTrue(gs.uhandler)
         self.assertFalse(gs.ehandler)
@@ -199,7 +199,7 @@ class GsDataTests(unittest.TestCase):
 
     def test_aligned_form(self):
         pe = only_xdata(enc_gs(0x80, eh=True, has_align=True, base=0x20, align=0x10))
-        gs = decode_gs_data(pe, XBASE, DiagnosticBag(), "t")
+        gs = decode_gs_data(pe, XBASE)
         self.assertTrue(gs.ehandler)
         self.assertTrue(gs.has_alignment)
         self.assertEqual(gs.cookie_offset, 0x80)
