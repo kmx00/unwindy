@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.9", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install (with flow extra)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[flow]"
+      - name: Run the full test suite
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+  wheel:
+    name: build wheel + sdist
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build distributions
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*
+      - name: Verify the wheel installs and runs (clean env, no flow extra)
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install dist/*.whl
+          /tmp/venv/bin/unwindy --version || true
+          /tmp/venv/bin/unwindy samples/b325e5a8da4f8bea2db9fc118f6a6f237731d734.bin --no-tui --limit 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unwindy-dist
+          path: dist/*
+
+  binary:
+    name: standalone binary (${{ matrix.os }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package + PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[flow]" pyinstaller
+      - name: Freeze a one-file binary
+        run: >
+          pyinstaller --onefile --noconfirm --name unwindy
+          --collect-all iced_x86
+          ci/pyinstaller_entry.py
+      - name: Smoke-test the binary
+        shell: bash
+        run: |
+          bin=$(ls dist/unwindy* | head -n1)
+          "$bin" samples/b325e5a8da4f8bea2db9fc118f6a6f237731d734.bin --no-tui --limit 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unwindy-${{ matrix.os }}
+          path: dist/unwindy*

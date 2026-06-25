@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,14 +8,14 @@ version = "0.0.6"
 description = "Slim PE64 x64 exception/unwind information viewer (no heavy deps)"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { file = "LICENSE" }
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE"]
 authors = [{ name = "kmx00" }]
 keywords = ["pe", "pe64", "x64", "unwind", "exception", "uwop", "rtl", "seh"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Software Development :: Disassemblers",
     "Operating System :: OS Independent",
-    "License :: Other/Proprietary License",
 ]
 # Zero hard runtime dependencies: the PE/unwind core is pure standard library.
 # The interactive forwarding-flow disassembly view uses iced-x86, exposed as an
