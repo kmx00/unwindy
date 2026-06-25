@@ -13,6 +13,7 @@ from .analyzer import Analysis, analyze
 from .errors import PEFormatError, UnwindyError
 from .pe import PEFile
 from .render import (
+    func_section_info,
     make_painter,
     render_diagnostics,
     render_function_detail,
@@ -166,9 +167,10 @@ def _unwind_to_dict(pe: PEFile, ui: Optional[UnwindInfo]) -> Optional[dict]:
 
 
 def _func_to_dict(pe: PEFile, f: RuntimeFunction) -> dict:
-    from .render import func_section_info
-
     begin_sec, end_sec, crosses = func_section_info(pe, f)
+    # Note: the interactive forwarding-flow trace (unwindy.flow) is intentionally
+    # not serialized here -- it needs iced-x86 and per-function disassembly, and
+    # keeping it out preserves a deterministic, pure-stdlib JSON contract.
     return {
         "index": f.index,
         "begin_rva": f.begin_address,

@@ -146,3 +146,42 @@ document it as interactive-only. Either way, note it so the omission is a choice
 
 Each step: keep `python -m unittest discover` green; for item 3 add a
 golden-JSON snapshot test of both samples *first*, then refactor under it.
+
+---
+
+## Outcome (branch `refactor/slim-down-0`)
+
+All items implemented behind a golden-output safety net
+(`tests/test_golden.py`: sha256 of `--json` + the table/detail renders for both
+samples, plus a committed b325 JSON slice). 142 tests green throughout.
+
+- **Item 1 — columns:** `render.Column` table is now the single source of truth
+  (name/align/value/sort_key/color). Deleted `tui._ALIGNS` and the 12-branch
+  `_sort_keyfn` ladder; both `render` and `tui` derive from `FUNC_COLUMN_TABLE`.
+- **Item 2 — branch decoding:** new pure-stdlib `branch.py`
+  (`follow_jump` / `direct_call_or_jump`); trampolines + handler-thunk
+  resolution now share it (3 hand-rolled copies removed). Recognition is now
+  uniform (jmp follows `e9`/`eb`); golden confirms identical results on both
+  samples.
+- **Item 3 — serialization:** scoped down. Most `to_dict`s are *curated* shapes
+  (omitted/renamed/computed fields), so a generic serializer was rejected as
+  needless abstraction. The four true field-mirrors
+  (`ScopeRecord`/`CxxCatch`/`CxxTryBlock`/`CxxFuncInfo`) now share a
+  `_JsonDataclass` mixin (`asdict`); no `serialize.py`.
+- **Item 4 — tui split:** `tui.py` is now a package — `tui/keys.py` (input),
+  `tui/text.py` (ANSI helpers), `tui/app.py` (`TuiApp`); `tui/__init__.py`
+  re-exports the public surface. `pyproject` lists `unwindy.tui`.
+- **Item 5 — dispatch:** `_dispatch` is now `_kind_for` (name/wraps → kind) +
+  `_decode_kind` (one decoder per layout); the duplicated GS-wrapper/name arms
+  are gone.
+- **Item 6 — flow parity:** *decided* — forwarding flow stays interactive-only.
+  It needs iced + per-function disassembly; keeping it out of `--json` preserves
+  a deterministic, pure-stdlib JSON contract. Documented in `cli._func_to_dict`
+  and the README.
+- **P3:** dropped unused `decode_gs_data(bag, where)`; hoisted the redundant
+  in-function `func_section_info` import in `cli`; froze `flow._KIND` at import
+  (removed the lazy mutator). Version literal left in two places (in sync); the
+  `importlib.metadata` indirection was judged not worth breaking editable runs.
+
+Not done (deliberately deferred): in-TUI search/filter and v3 unwind remain in
+the main backlog; they are features, not slim-down.

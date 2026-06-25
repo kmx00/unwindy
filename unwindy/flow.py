@@ -105,9 +105,23 @@ class FlowTrace:
 
 # --- decoding ---------------------------------------------------------------
 
-# iced FlowControl -> our coarse instruction kind.
-_KIND: Dict[int, str] = {}
-# Block decode stops after one of these (control leaves linearly).
+# iced FlowControl -> our coarse instruction kind (built once, when iced is
+# present).  Block decode stops after a terminator kind; calls do not end a block.
+if _iced is not None:
+    _FC = _iced.FlowControl
+    _KIND: Dict[int, str] = {
+        _FC.NEXT: "seq",
+        _FC.CALL: "call",
+        _FC.INDIRECT_CALL: "icall",
+        _FC.UNCONDITIONAL_BRANCH: "jmp",
+        _FC.CONDITIONAL_BRANCH: "jcc",
+        _FC.INDIRECT_BRANCH: "ijmp",
+        _FC.RETURN: "ret",
+        _FC.INTERRUPT: "int",
+        _FC.EXCEPTION: "bad",
+    }
+else:  # pragma: no cover - exercised only where the wheel is absent
+    _KIND = {}
 _TERMINATORS = frozenset({"jmp", "jcc", "ijmp", "ret", "int", "bad"})
 
 _FORMATTER = None
@@ -125,25 +139,6 @@ def _formatter():
         f.space_after_operand_separator = True
         _FORMATTER = f
     return _FORMATTER
-
-
-def _build_kind_table() -> None:
-    if _KIND or _iced is None:
-        return
-    fc = _iced.FlowControl
-    _KIND.update(
-        {
-            fc.NEXT: "seq",
-            fc.CALL: "call",
-            fc.INDIRECT_CALL: "icall",
-            fc.UNCONDITIONAL_BRANCH: "jmp",
-            fc.CONDITIONAL_BRANCH: "jcc",
-            fc.INDIRECT_BRANCH: "ijmp",
-            fc.RETURN: "ret",
-            fc.INTERRUPT: "int",
-            fc.EXCEPTION: "bad",
-        }
-    )
 
 
 def _decode_block(
@@ -206,8 +201,6 @@ def trace_flow(
     """
     if _iced is None:
         return FlowTrace(begin, [], "no-iced")
-    _build_kind_table()
-
     hops: List[FlowHop] = []
     visited = set()
     seg0 = pe.section_name(begin)

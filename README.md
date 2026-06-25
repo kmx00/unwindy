@@ -167,6 +167,8 @@ python -m unwindy app.exe --json --only-handlers > handlers.json
   `.grfn*` thunks that `jmp` into a `call resolver; jmp rax` stub) is traced
   block by block to its destination. Each block is disassembled and the chain
   of section-labelled hops is shown; hops landing on a known begin are jumpable.
+  This view is interactive-only: it is not part of `--json` (which stays
+  deterministic and pure-stdlib).
 * **Section context** — every begin/end/handler address is labelled with its
   containing section (`section:0xADDRESS`), and functions whose body spans two
   sections are flagged (`x-sect` column / `crosses_section` in JSON).
