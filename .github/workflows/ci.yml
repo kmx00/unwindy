@@ -53,7 +53,7 @@ jobs:
         run: |
           python -m venv /tmp/venv
           /tmp/venv/bin/pip install dist/*.whl
-          /tmp/venv/bin/unwindy --version || true
+          /tmp/venv/bin/unwindy --version
           /tmp/venv/bin/unwindy samples/b325e5a8da4f8bea2db9fc118f6a6f237731d734.bin --no-tui --limit 1
       - uses: actions/upload-artifact@v4
         with:
@@ -91,3 +91,30 @@ jobs:
         with:
           name: unwindy-${{ matrix.os }}
           path: dist/unwindy*
+
+  release:
+    name: publish release
+    needs: [wheel, binary]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Stage release assets
+        run: |
+          mkdir -p release
+          cp artifacts/unwindy-dist/* release/
+          cp artifacts/unwindy-ubuntu-latest/unwindy "release/unwindy-${GITHUB_REF_NAME}-linux-x86_64"
+          cp artifacts/unwindy-windows-latest/unwindy.exe "release/unwindy-${GITHUB_REF_NAME}-windows-x86_64.exe"
+          ls -l release
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${GITHUB_REF_NAME}" release/*
+          --repo "${GITHUB_REPOSITORY}"
+          --title "unwindy ${GITHUB_REF_NAME}"
+          --generate-notes
