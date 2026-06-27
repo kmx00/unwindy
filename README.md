@@ -18,6 +18,24 @@ Reverse-engineering and crash-analysis workflows constantly need to answer
 "what does the prolog of this function do, and who handles its exceptions?"
 unwindy reads the PE straight off disk, validates it, and prints the answer.
 
+## Screenshots
+
+### 1. Function list (the TUI)
+
+The terminal UI lands on a paginated list of every `RUNTIME_FUNCTION`. Each row
+shows begin/end as `section:0xADDRESS`, a digest of the prolog (`ops`), the
+cross-section flag (`x-sect`), and the peeled real entry (`real-start`).
+
+![function list](assets/1.png)
+
+### 2. Inspecting a function
+
+`Enter` opens the full decoded detail: prolog unwind codes rendered as real
+instructions, the language-specific handler (named via its import thunk), and the
+resolved chained parent.
+
+![inspect function](assets/2.png)
+
 ## Install / run
 
 No install required. Point it at one binary, several, or a directory of `*.bin`:
